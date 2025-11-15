@@ -11,7 +11,7 @@ do
     end
 end
 
--- Variables
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -32,6 +32,66 @@ local SmoothStrength = 0.25
 
 local FlyEnabled = false
 local NoclipEnabled = false
+
+local RadarEnabled = true
+
+-- Config table
+local config = {
+    ESPEnabled = ESPEnabled,
+    ESPTeamCheck = ESPTeamCheck,
+    ESPWallCheck = ESPWallCheck,
+    ESPDistance = ESPDistance,
+    AimEnabled = AimEnabled,
+    AimTeamCheck = AimTeamCheck,
+    AimWallCheck = AimWallCheck,
+    AimDistance = AimDistance,
+    SmoothStrength = SmoothStrength,
+    FlyEnabled = FlyEnabled,
+    NoclipEnabled = NoclipEnabled,
+    RadarEnabled = RadarEnabled
+}
+
+-- Helpers for Save/Load config
+local CONFIG_FILE = "binh_hub_config.json"
+
+local function saveConfig()
+    config.ESPEnabled = ESPEnabled
+    config.ESPTeamCheck = ESPTeamCheck
+    config.ESPWallCheck = ESPWallCheck
+    config.ESPDistance = ESPDistance
+    config.AimEnabled = AimEnabled
+    config.AimTeamCheck = AimTeamCheck
+    config.AimWallCheck = AimWallCheck
+    config.AimDistance = AimDistance
+    config.SmoothStrength = SmoothStrength
+    config.FlyEnabled = FlyEnabled
+    config.NoclipEnabled = NoclipEnabled
+    config.RadarEnabled = RadarEnabled
+
+    writefile(CONFIG_FILE, HttpService:JSONEncode(config))
+    print("[.binh Hub] Config saved!")
+end
+
+local function loadConfig()
+    if isfile(CONFIG_FILE) then
+        local data = HttpService:JSONDecode(readfile(CONFIG_FILE))
+        ESPEnabled = data.ESPEnabled
+        ESPTeamCheck = data.ESPTeamCheck
+        ESPWallCheck = data.ESPWallCheck
+        ESPDistance = data.ESPDistance
+        AimEnabled = data.AimEnabled
+        AimTeamCheck = data.AimTeamCheck
+        AimWallCheck = data.AimWallCheck
+        AimDistance = data.AimDistance
+        SmoothStrength = data.SmoothStrength
+        FlyEnabled = data.FlyEnabled
+        NoclipEnabled = data.NoclipEnabled
+        RadarEnabled = data.RadarEnabled
+        print("[.binh Hub] Config loaded!")
+    else
+        print("[.binh Hub] No config file found!")
+    end
+end
 
 -- Create WindUI Window (Logo updated here)
 local Window = WindUI:CreateWindow({
@@ -130,6 +190,28 @@ MoveTab:Toggle({
     Callback = function(state) NoclipEnabled = state end
 })
 
+-- Radar Tab
+local RadarTab = Window:Tab({Title = "Radar", Icon = "map"})
+RadarTab:Toggle({
+    Title = "Enable Radar",
+    Desc = "Bật/tắt radar minimap",
+    Default = RadarEnabled,
+    Callback = function(state) RadarEnabled = state end
+})
+
+-- Settings Tab (Save & Load Config)
+local SettingsTab = Window:Tab({Title = "Settings", Icon = "settings"})
+SettingsTab:Button({
+    Title = "Save Config",
+    Desc = "Lưu lại cấu hình hiện tại",
+    Callback = function() saveConfig() end
+})
+SettingsTab:Button({
+    Title = "Load Config",
+    Desc = "Tải cấu hình đã lưu",
+    Callback = function() loadConfig() end
+})
+
 -- Helper function: check visibility
 local function isVisible(part)
     local ray = Ray.new(Camera.CFrame.Position, (part.Position - Camera.CFrame.Position).Unit * 1000)
@@ -137,7 +219,68 @@ local function isVisible(part)
     return hit == nil or hit:IsDescendantOf(part.Parent)
 end
 
+-- Radar UI (simple drawing)
+local radarGui
+local function createRadar()
+    if radarGui then radarGui:Destroy() end
+    radarGui = Instance.new("ScreenGui")
+    radarGui.Name = "binhHubRadar"
+    radarGui.Parent = game:GetService("CoreGui")
+    
+    local frame = Instance.new("Frame")
+    frame.Name = "RadarFrame"
+    frame.Parent = radarGui
+    frame.BackgroundTransparency = 0.5
+    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    frame.BorderSizePixel = 0
+    frame.Position = UDim2.new(0.01,0, 0.75,0)
+    frame.Size = UDim2.new(0,160, 0,160)
+    frame.AnchorPoint = Vector2.new(0,0)
+    frame.ZIndex = 10
+
+    return frame
+end
+
+local function updateRadar(radarFrame)
+    for _,v in pairs(radarFrame:GetChildren()) do
+        if v:IsA("Frame") and v.Name == "Blip" then v:Destroy() end
+    end
+
+    local center = Vector2.new(radarFrame.AbsoluteSize.X/2, radarFrame.AbsoluteSize.Y/2)
+    local scanRange = 150
+
+    for _,plr in pairs(Players:GetPlayers()) do
+        if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local rel = plr.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position
+            if rel.magnitude <= scanRange then
+                local dir = Vector2.new(rel.X,rel.Z) * (radarFrame.AbsoluteSize.X/(2*scanRange))
+                local blip = Instance.new("Frame")
+                blip.Name = "Blip"
+                blip.Parent = radarFrame
+                blip.BackgroundColor3 = (plr.Team == player.Team and Color3.fromRGB(0,255,255)) or Color3.fromRGB(255,0,0)
+                blip.Size = UDim2.new(0,7,0,7)
+                blip.Position = UDim2.new(0, center.X+dir.X-3, 0, center.Y+dir.Y-3)
+                blip.BackgroundTransparency = 0
+                blip.BorderSizePixel = 0
+                blip.ZIndex = 11
+            end
+        end
+    end
+
+    -- LocalPlayer center
+    local plFrame = Instance.new("Frame")
+    plFrame.Name = "Blip"
+    plFrame.Parent = radarFrame
+    plFrame.BackgroundColor3 = Color3.fromRGB(30, 255, 30)
+    plFrame.Size = UDim2.new(0,8,0,8)
+    plFrame.Position = UDim2.new(0,center.X-4,0,center.Y-4)
+    plFrame.BorderSizePixel = 0
+    plFrame.BackgroundTransparency = 0
+    plFrame.ZIndex = 12
+end
+
 -- Main Loop
+local radarFrameInstance
 RunService.RenderStepped:Connect(function()
     -- ESP
     for _, plr in pairs(Players:GetPlayers()) do
@@ -218,5 +361,15 @@ RunService.RenderStepped:Connect(function()
         for _, part in pairs(player.Character:GetDescendants()) do
             if part:IsA("BasePart") then part.CanCollide = false end
         end
+    end
+
+    -- Radar
+    if RadarEnabled then
+        if not radarFrameInstance or not radarFrameInstance.Parent then
+            radarFrameInstance = createRadar()
+        end
+        updateRadar(radarFrameInstance)
+    elseif radarFrameInstance and radarFrameInstance.Parent then
+        radarFrameInstance.Parent = nil
     end
 end)
