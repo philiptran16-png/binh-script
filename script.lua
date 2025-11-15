@@ -11,6 +11,7 @@ do
     end
 end
 
+-- Services
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -19,25 +20,11 @@ local Workspace = game:GetService("Workspace")
 local Camera = Workspace.CurrentCamera
 local player = Players.LocalPlayer
 
-local ESPEnabled = false
-local ESPTeamCheck = false
-local ESPWallCheck = false
-local ESPDistance = 200
+-- Config
+local ESPEnabled, ESPTeamCheck, ESPWallCheck, ESPDistance = true, true, true, 200
+local AimEnabled, AimTeamCheck, AimWallCheck, AimDistance, SmoothStrength = true, true, true, 200, 0.25
+local FlyEnabled, NoclipEnabled, RadarEnabled, AntiFlingEnabled = false, false, true, true
 
-local AimEnabled = false
-local AimTeamCheck = false
-local AimWallCheck = false
-local AimDistance = 200
-local SmoothStrength = 0.25
-
-local FlyEnabled = false
-local NoclipEnabled = false
-
-local RadarEnabled = false
-
-local AntiFlingEnabled = false
-
--- Config table
 local config = {
     ESPEnabled = ESPEnabled,
     ESPTeamCheck = ESPTeamCheck,
@@ -54,9 +41,9 @@ local config = {
     AntiFlingEnabled = AntiFlingEnabled
 }
 
--- Helpers for Save/Load config
 local CONFIG_FILE = "binh_hub_config.json"
 
+-- Save / Load Config
 local function saveConfig()
     config.ESPEnabled = ESPEnabled
     config.ESPTeamCheck = ESPTeamCheck
@@ -98,12 +85,12 @@ local function loadConfig()
     end
 end
 
--- Create WindUI Window (Logo updated here)
+-- Create WindUI Window
 local Window = WindUI:CreateWindow({
     Title = ".binh Hub | WindUI",
     Author = "by .binh",
     Folder = "binh",
-    Icon = "https://github.com/philiptran16-png/binh-script/blob/main/Minimalistic%20and%20elegant%20_B_%20logo%2C%20monochrome%2C%20no%20colors%2C%20clean%20lines%2C%20modern%20design%2C%20geometric%[...]
+    Icon = "https://github.com/philiptran16-png/binh-script/raw/main/Minimalistic_and_elegant_B_logo_monochrome_no_colors_clean_lines_modern_design_geometric.png",
     IconSize = 44,
     NewElements = true,
     OpenButton = {
@@ -118,176 +105,88 @@ local Window = WindUI:CreateWindow({
 
 -- ESP Tab
 local ESPTab = Window:Tab({Title = "ESP", Icon = "eye"})
-ESPTab:Toggle({
-    Title = "Enable ESP",
-    Desc = "Hiển thị người chơi",
-    Default = ESPEnabled,
-    Callback = function(state) ESPEnabled = state end
-})
-ESPTab:Toggle({
-    Title = "Team Check ESP",
-    Desc = "Chỉ hiện người khác team",
-    Default = ESPTeamCheck,
-    Callback = function(state) ESPTeamCheck = state end
-})
-ESPTab:Toggle({
-    Title = "Wall Check",
-    Desc = "Ẩn người chơi bị che khuất",
-    Default = ESPWallCheck,
-    Callback = function(state) ESPWallCheck = state end
-})
-ESPTab:Slider({
-    Title = "ESP Distance",
-    Min = 50,
-    Max = 500,
-    Default = ESPDistance,
-    Callback = function(value) ESPDistance = value end
-})
+ESPTab:Toggle({Title = "Enable ESP", Desc = "Hiển thị người chơi", Default = ESPEnabled, Callback = function(state) ESPEnabled = state end})
+ESPTab:Toggle({Title = "Team Check ESP", Desc = "Chỉ hiện người khác team", Default = ESPTeamCheck, Callback = function(state) ESPTeamCheck = state end})
+ESPTab:Toggle({Title = "Wall Check", Desc = "Ẩn người chơi bị che khuất", Default = ESPWallCheck, Callback = function(state) ESPWallCheck = state end})
+ESPTab:Slider({Title = "ESP Distance", Min = 50, Max = 500, Default = ESPDistance, Callback = function(value) ESPDistance = value end})
 
 -- Aimbot Tab
 local AimTab = Window:Tab({Title = "Aimbot", Icon = "target"})
-AimTab:Toggle({
-    Title = "Enable AIM",
-    Desc = "Aim vào đầu đối thủ",
-    Default = AimEnabled,
-    Callback = function(state) AimEnabled = state end
-})
-AimTab:Toggle({
-    Title = "Team Check AIM",
-    Desc = "Chỉ aim người khác team",
-    Default = AimTeamCheck,
-    Callback = function(state) AimTeamCheck = state end
-})
-AimTab:Toggle({
-    Title = "Wall Check",
-    Desc = "Không aim nếu đối thủ bị che khuất",
-    Default = AimWallCheck,
-    Callback = function(state) AimWallCheck = state end
-})
-AimTab:Slider({
-    Title = "Aim Distance",
-    Min = 50,
-    Max = 500,
-    Default = AimDistance,
-    Callback = function(value) AimDistance = value end
-})
-AimTab:Slider({
-    Title = "Smooth Strength",
-    Min = 0.05,
-    Max = 1,
-    Default = SmoothStrength,
-    Step = 0.01,
-    Callback = function(value) SmoothStrength = value end
-})
+AimTab:Toggle({Title = "Enable AIM", Desc = "Aim vào đầu đối thủ", Default = AimEnabled, Callback = function(state) AimEnabled = state end})
+AimTab:Toggle({Title = "Team Check AIM", Desc = "Chỉ aim người khác team", Default = AimTeamCheck, Callback = function(state) AimTeamCheck = state end})
+AimTab:Toggle({Title = "Wall Check", Desc = "Không aim nếu đối thủ bị che khuất", Default = AimWallCheck, Callback = function(state) AimWallCheck = state end})
+AimTab:Slider({Title = "Aim Distance", Min = 50, Max = 500, Default = AimDistance, Callback = function(value) AimDistance = value end})
+AimTab:Slider({Title = "Smooth Strength", Min = 0.05, Max = 1, Default = SmoothStrength, Step = 0.01, Callback = function(value) SmoothStrength = value end})
 
 -- Movement Tab
 local MoveTab = Window:Tab({Title = "Movement", Icon = "arrow-up-right"})
-MoveTab:Toggle({
-    Title = "Fly",
-    Desc = "Bay tự do WSAD + Space + Ctrl",
-    Default = FlyEnabled,
-    Callback = function(state) FlyEnabled = state end
-})
-MoveTab:Toggle({
-    Title = "Noclip",
-    Desc = "Đi xuyên tường",
-    Default = NoclipEnabled,
-    Callback = function(state) NoclipEnabled = state end
-})
-MoveTab:Toggle({
-    Title = "Anti Fling",
-    Desc = "Chống văng nhân vật bởi lực ngoài",
-    Default = AntiFlingEnabled,
-    Callback = function(state) AntiFlingEnabled = state end
-})
+MoveTab:Toggle({Title = "Fly", Desc = "Bay tự do WSAD + Space + Ctrl", Default = FlyEnabled, Callback = function(state) FlyEnabled = state end})
+MoveTab:Toggle({Title = "Noclip", Desc = "Đi xuyên tường", Default = NoclipEnabled, Callback = function(state) NoclipEnabled = state end})
+MoveTab:Toggle({Title = "Anti Fling", Desc = "Chống văng nhân vật bởi lực ngoài", Default = AntiFlingEnabled, Callback = function(state) AntiFlingEnabled = state end})
 
 -- Radar Tab
 local RadarTab = Window:Tab({Title = "Radar", Icon = "map"})
-RadarTab:Toggle({
-    Title = "Enable Radar",
-    Desc = "Bật/tắt radar minimap",
-    Default = RadarEnabled,
-    Callback = function(state) RadarEnabled = state end
-})
+RadarTab:Toggle({Title = "Enable Radar", Desc = "Bật/tắt radar minimap", Default = RadarEnabled, Callback = function(state) RadarEnabled = state end})
 
--- Settings Tab (Save & Load Config)
+-- Settings Tab
 local SettingsTab = Window:Tab({Title = "Settings", Icon = "settings"})
-SettingsTab:Button({
-    Title = "Save Config",
-    Desc = "Lưu lại cấu hình hiện tại",
-    Callback = function() saveConfig() end
-})
-SettingsTab:Button({
-    Title = "Load Config",
-    Desc = "Tải cấu hình đã lưu",
-    Callback = function() loadConfig() end
-})
+SettingsTab:Button({Title = "Save Config", Desc = "Lưu lại cấu hình hiện tại", Callback = saveConfig})
+SettingsTab:Button({Title = "Load Config", Desc = "Tải cấu hình đã lưu", Callback = loadConfig})
 
--- Helper function: check visibility
+-- Helper: Check visibility
 local function isVisible(part)
+    if not part or not part.Parent then return false end
     local ray = Ray.new(Camera.CFrame.Position, (part.Position - Camera.CFrame.Position).Unit * 1000)
     local hit = Workspace:FindPartOnRayWithIgnoreList(ray, {player.Character})
     return hit == nil or hit:IsDescendantOf(part.Parent)
 end
 
--- ESP setup: always working after respawn/death
+-- Setup ESP
 local function setupESP(plr)
     local function doESP(char)
         local head = char:WaitForChild("Head", 5)
         if not head then return end
-
         local highlightConn
         highlightConn = RunService.RenderStepped:Connect(function()
-            if plr ~= player and head then
-                if ESPEnabled then
-                    if ESPTeamCheck and plr.Team == player.Team then return end
-                    if ESPWallCheck and not isVisible(head) then return end
-                    if not char:FindFirstChild("Highlight") then
-                        local hl = Instance.new("Highlight")
-                        hl.Name = "Highlight"
-                        hl.Parent = char
-                        hl.FillColor = Color3.fromRGB(0,255,0)
-                        hl.OutlineColor = Color3.fromRGB(255,255,255)
-                        hl.FillTransparency = 0.5
-                    end
-                else
-                    local hl = char:FindFirstChild("Highlight")
-                    if hl then hl:Destroy() end
+            if ESPEnabled and plr ~= player and head then
+                if ESPTeamCheck and plr.Team == player.Team then return end
+                if ESPWallCheck and not isVisible(head) then return end
+                if not char:FindFirstChild("Highlight") then
+                    local hl = Instance.new("Highlight")
+                    hl.Name = "Highlight"
+                    hl.Parent = char
+                    hl.FillColor = Color3.fromRGB(0,255,0)
+                    hl.OutlineColor = Color3.fromRGB(255,255,255)
+                    hl.FillTransparency = 0.5
                 end
+            else
+                local hl = char:FindFirstChild("Highlight")
+                if hl then hl:Destroy() end
             end
         end)
-
         char.AncestryChanged:Connect(function(_, parent)
-            if not parent and highlightConn then
-                highlightConn:Disconnect()
-                highlightConn = nil
-            end
+            if not parent and highlightConn then highlightConn:Disconnect() highlightConn = nil end
         end)
     end
-
-    if plr.Character then
-        doESP(plr.Character)
-    end
-
+    if plr.Character then doESP(plr.Character) end
     plr.CharacterAdded:Connect(doESP)
 end
 
 for _,plr in ipairs(Players:GetPlayers()) do
     if plr ~= player then setupESP(plr) end
 end
-
 Players.PlayerAdded:Connect(function(plr)
     if plr ~= player then setupESP(plr) end
 end)
 
--- Radar UI
-local radarGui
+-- Radar
+local radarGui, radarFrameInstance
 local function createRadar()
     if radarGui then radarGui:Destroy() end
     radarGui = Instance.new("ScreenGui")
     radarGui.Name = "binhHubRadar"
     radarGui.Parent = game:GetService("CoreGui")
-    
+
     local frame = Instance.new("Frame")
     frame.Name = "RadarFrame"
     frame.Parent = radarGui
@@ -298,7 +197,6 @@ local function createRadar()
     frame.Size = UDim2.new(0,160, 0,160)
     frame.AnchorPoint = Vector2.new(0,0)
     frame.ZIndex = 10
-
     return frame
 end
 
@@ -306,15 +204,13 @@ local function updateRadar(radarFrame)
     for _,v in pairs(radarFrame:GetChildren()) do
         if v:IsA("Frame") and v.Name == "Blip" then v:Destroy() end
     end
-
     local center = Vector2.new(radarFrame.AbsoluteSize.X/2, radarFrame.AbsoluteSize.Y/2)
     local scanRange = 150
-
     for _,plr in pairs(Players:GetPlayers()) do
         if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local rel = plr.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position
-            if rel.magnitude <= scanRange then
-                local dir = Vector2.new(rel.X,rel.Z) * (radarFrame.AbsoluteSize.X/(2*scanRange))
+            if rel.Magnitude <= scanRange then
+                local dir = Vector2.new(rel.X, rel.Z) * (radarFrame.AbsoluteSize.X/(2*scanRange))
                 local blip = Instance.new("Frame")
                 blip.Name = "Blip"
                 blip.Parent = radarFrame
@@ -327,8 +223,7 @@ local function updateRadar(radarFrame)
             end
         end
     end
-
-    -- LocalPlayer center
+    -- Local player
     local plFrame = Instance.new("Frame")
     plFrame.Name = "Blip"
     plFrame.Parent = radarFrame
@@ -340,13 +235,11 @@ local function updateRadar(radarFrame)
     plFrame.ZIndex = 12
 end
 
--- Main Loop (chỉ các chức năng khác, ESP đã fix bằng sự kiện)
-local radarFrameInstance
+-- Main Loop
 RunService.RenderStepped:Connect(function()
     -- Aimbot
-    if AimEnabled then
-        local nearestHead = nil
-        local nearestDist = math.huge
+    if AimEnabled and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        local nearestHead, nearestDist = nil, math.huge
         for _, plr in pairs(Players:GetPlayers()) do
             if plr ~= player and plr.Character and plr.Character:FindFirstChild("Head") then
                 local head = plr.Character.Head
@@ -354,16 +247,11 @@ RunService.RenderStepped:Connect(function()
                 if AimTeamCheck and plr.Team == player.Team then continue end
                 if AimWallCheck and not isVisible(head) then continue end
                 if dist > AimDistance then continue end
-                if dist < nearestDist then
-                    nearestDist = dist
-                    nearestHead = head
-                end
+                if dist < nearestDist then nearestDist, nearestHead = dist, head end
             end
         end
         if nearestHead then
-            local cf = Camera.CFrame
-            local targetCF = CFrame.new(cf.Position, nearestHead.Position)
-            Camera.CFrame = cf:Lerp(targetCF, SmoothStrength)
+            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, nearestHead.Position), SmoothStrength)
         end
     end
 
@@ -384,11 +272,7 @@ RunService.RenderStepped:Connect(function()
         if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + Camera.CFrame.RightVector end
         if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0,1,0) end
         if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir = dir - Vector3.new(0,1,0) end
-        if dir.Magnitude > 0 then
-            root.BV.Velocity = dir.Unit * 50
-        else
-            root.BV.Velocity = Vector3.new(0,0,0)
-        end
+        root.BV.Velocity = dir.Magnitude > 0 and dir.Unit * 50 or Vector3.new(0,0,0)
     elseif player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character.HumanoidRootPart:FindFirstChild("BV") then
         player.Character.HumanoidRootPart.BV:Destroy()
     end
@@ -404,8 +288,7 @@ RunService.RenderStepped:Connect(function()
     if AntiFlingEnabled and player.Character then
         for _, part in pairs(player.Character:GetDescendants()) do
             if part:IsA("BasePart") then
-                part.Velocity = Vector3.new(0, 0, 0)
-                part.RotVelocity = Vector3.new(0, 0, 0)
+                part.Velocity, part.RotVelocity = Vector3.new(), Vector3.new()
             end
             if part:IsA("BodyVelocity") or part:IsA("BodyAngularVelocity")
               or part:IsA("BodyForce") or part:IsA("BodyThrust")
@@ -417,9 +300,7 @@ RunService.RenderStepped:Connect(function()
 
     -- Radar
     if RadarEnabled then
-        if not radarFrameInstance or not radarFrameInstance.Parent then
-            radarFrameInstance = createRadar()
-        end
+        if not radarFrameInstance or not radarFrameInstance.Parent then radarFrameInstance = createRadar() end
         updateRadar(radarFrameInstance)
     elseif radarFrameInstance and radarFrameInstance.Parent then
         radarFrameInstance.Parent = nil
