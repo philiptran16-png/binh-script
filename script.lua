@@ -1,5 +1,3 @@
-
-
 -- ======================== --
 --        SERVICES          --
 -- ======================== --
@@ -48,13 +46,10 @@ local Themes = {
 }
 
 local defaultConfig = {
-    -- ESP
     ESPEnabled = false,
     ESPTeamCheck = false,
     ESPWallCheck = false,
     ESPDistance = 200,
-
-    -- Aimbot
     AimEnabled = false,
     AimTeamCheck = false,
     AimWallCheck = false,
@@ -62,34 +57,23 @@ local defaultConfig = {
     SmoothStrength = 0.25,
     AimFOV = 100,
     ShowAimFOV = false,
-    -- AimKey saved as {kind="UserInputType"/"KeyCode", name="MouseButton2"/"Q"}
     AimKey = {kind = "UserInputType", name = "MouseButton2"},
-
-    -- Movement
     FlyEnabled = false,
     NoclipEnabled = false,
     AntiFlingEnabled = false,
     FlySpeed = 50,
     WalkSpeed = 16,
-
-    -- Teleport
     TeleportEnabled = false,
     SavePositionsEnabled = false,
-    SavedPositions = {}, -- map slot-> {x,y,z}
-
-    -- Radar
+    SavedPositions = {},
     RadarEnabled = false,
     ShowEnemyFOV = false,
     SoundVisualization = false,
     ObjectiveTracker = false,
-
-    -- Performance
     PerformanceEnabled = false,
     AutoFPSBoost = false,
     MemoryCleaner = false,
     RenderDistanceManager = false,
-
-    -- UI
     CurrentTheme = "Default"
 }
 
@@ -164,7 +148,6 @@ loadConfig()
 local function applyTheme(themeName)
     if not Themes[themeName] then themeName = "Default" end
     Config.CurrentTheme = themeName
-    -- Update drawing objects' colors dynamically elsewhere where used
     print("[.binh Hub] Applied theme:", themeName)
 end
 
@@ -190,7 +173,6 @@ end
 -- ======================== --
 local Drawing = Drawing or (function() error("Drawing API not available") end)
 
--- clean up function for Drawing tables
 local function removeDrawingSet(set)
     if not set then return end
     for _, obj in pairs(set) do
@@ -296,7 +278,6 @@ local function updateESP()
     end
 end
 
--- cleanup on player leaving
 Players.PlayerRemoving:Connect(function(plr) removeESPForPlayer(plr) end)
 
 -- ======================== --
@@ -327,22 +308,18 @@ local function updateAimFOVCircle()
         AimFOVCircle.Radius = Config.AimFOV
         AimFOVCircle.Color = Themes[Config.CurrentTheme].Primary
         AimFOVCircle.Visible = Config.ShowAimFOV and Config.AimEnabled
-        -- center it on screen center
         AimFOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
     else
         if Config.ShowAimFOV and Config.AimEnabled then createAimFOVCircle() end
     end
 end
 
--- convert input to AimKey table
 local function aimKeyFromInput(input)
-    -- if keyboard, use KeyCode
     if input.UserInputType == Enum.UserInputType.Keyboard then
         if input.KeyCode and input.KeyCode.Name then
             return {kind = "KeyCode", name = input.KeyCode.Name}
         end
     else
-        -- mouse/button types
         local uit = input.UserInputType
         if uit and uit.Name then
             return {kind = "UserInputType", name = uit.Name}
@@ -375,11 +352,9 @@ local function isAimPressed()
     else
         local u = Enum.UserInputType[Config.AimKey.name]
         if not u then return false end
-        -- Mouse buttons check via IsMouseButtonPressed expects Enum.UserInputType values
         if u == Enum.UserInputType.MouseButton1 or u == Enum.UserInputType.MouseButton2 or u == Enum.UserInputType.MouseButton3 then
             return UserInputService:IsMouseButtonPressed(u)
         else
-            -- other types fallback to IsKeyDown? unlikely
             return UserInputService:IsKeyDown(Enum.KeyCode[Config.AimKey.name]) or false
         end
     end
@@ -404,7 +379,6 @@ local function getClosestAimbotTarget()
 
         local distFromCenter = (center - Vector2.new(worldToScreen.X, worldToScreen.Y)).Magnitude
         if distFromCenter <= Config.AimFOV and distFromCenter < bestDist then
-            -- distance check in world
             local worldDist = (LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude
             if worldDist > Config.AimDistance then continue end
 
@@ -472,7 +446,7 @@ local function enableFly(flag)
         if UserInputService:IsKeyDown(Enum.KeyCode.D) then vel = vel + cam.CFrame.RightVector end
         if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vel = vel + Vector3.new(0,1,0) end
         if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then vel = vel + Vector3.new(0,-1,0) end
-        vel = vel.Unit == vel and Vector3.new(0,0,0) or vel
+        vel = vel.Magnitude == 0 and Vector3.new(0,0,0) or vel
         if vel.Magnitude > 0 then
             bodyVelocity.Velocity = vel.Unit * Config.FlySpeed
             bodyGyro.CFrame = CFrame.new(root.Position, root.Position + cam.CFrame.LookVector)
@@ -521,7 +495,6 @@ local function enableAntiFling(flag)
     end)
 end
 
--- Ensure movement re-enabled after respawn
 LocalPlayer.CharacterAdded:Connect(function(char)
     wait(0.8)
     if Config.FlyEnabled then enableFly(true) end
@@ -559,7 +532,6 @@ local function teleportToSaved(slot)
 end
 
 local function teleportToSpawn()
-    -- look for spawn locations in Workspace
     local found = nil
     if Workspace:FindFirstChildWhichIsA("SpawnLocation") then
         found = Workspace:FindFirstChildWhichIsA("SpawnLocation")
@@ -591,7 +563,6 @@ local function teleportToObjective()
             end
         end
     end
-    -- fallback: search for parts with common objective names
     for _, obj in pairs(Workspace:GetDescendants()) do
         if obj:IsA("BasePart") and (string.find(string.lower(obj.Name), "flag") or string.find(string.lower(obj.Name), "objective") or string.find(string.lower(obj.Name), "point")) then
             teleportToPosition(obj.Position)
@@ -608,7 +579,6 @@ local function findSafeSpot()
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     local candidates = {}
 
-    -- search for large parts that can be cover
     for _, part in pairs(Workspace:GetDescendants()) do
         if part:IsA("BasePart") and part.Size.Magnitude > 20 then
             local offset = part.CFrame.LookVector * (part.Size.Z/2 + 3)
@@ -646,7 +616,7 @@ end
 -- ======================== --
 local radarGui = nil
 local radarFrame = nil
-local radarBlips = {} -- maps player->frame
+local radarBlips = {}
 
 local function createRadar()
     if radarGui then radarGui:Destroy() radarGui = nil end
@@ -688,7 +658,6 @@ local function updateRadar()
     end
     if not radarGui then createRadar() end
     if not radarFrame then return end
-    -- remove old blips
     for _, f in pairs(radarBlips) do
         if f and f.Parent then f:Destroy() end
     end
@@ -697,7 +666,7 @@ local function updateRadar()
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     local cam = Workspace.CurrentCamera
-    local range = 150 -- world units mapping to radar
+    local range = 150
     for _, plr in pairs(Players:GetPlayers()) do
         if plr == LocalPlayer then continue end
         if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then continue end
@@ -715,8 +684,6 @@ local function updateRadar()
         blip.BorderSizePixel = 0
         blip.Parent = radarFrame
         radarBlips[plr] = blip
-
-        -- optionally show enemy FOV indicator or objective markers etc.
     end
 end
 
@@ -744,7 +711,6 @@ local function applyPerformanceMode()
             Lighting.GlobalShadows = false
             Lighting.FogEnd = 100
             Lighting.Brightness = 2
-            -- disable particle-like effects
             for _, obj in pairs(Workspace:GetDescendants()) do
                 if obj:IsA("ParticleEmitter") or obj:IsA("Smoke") or obj:IsA("Fire") then
                     obj.Enabled = false
@@ -752,13 +718,11 @@ local function applyPerformanceMode()
             end
         end)
     end
-
     if Config.MemoryCleaner then
         pcall(function()
             collectgarbage("collect")
         end)
     end
-
     if Config.RenderDistanceManager then
         pcall(function()
             Camera.MaxDistance = 500
@@ -795,7 +759,6 @@ end
 -- ======================== --
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
-    -- If waiting for key bind
     if waitingForAimKey then
         setAimKeyFromInput(input)
         waitingForAimKey = false
@@ -803,12 +766,9 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
--- convenient toggle on a hotkey (optional)
--- Example: press RightBracket to toggle UI or features (customize if desired)
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.KeyCode == Enum.KeyCode.RightBracket then
-        -- toggle ESP quick (example)
         Config.ESPEnabled = not Config.ESPEnabled
     end
 end)
@@ -817,11 +777,8 @@ end)
 --      MAIN LOOPS         --
 -- ======================== --
 RunService.RenderStepped:Connect(function()
-    -- update ESP drawings and aim circle each frame
     pcall(updateESP)
     pcall(updateAimFOVCircle)
-
-    -- aim behavior
     if Config.AimEnabled and isAimPressed() then
         local targetHRP = getClosestAimbotTarget()
         if targetHRP and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
@@ -833,11 +790,9 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- radar updating on heartbeat (less frequent)
 RunService.Heartbeat:Connect(function()
     pcall(function()
         if Config.RadarEnabled then updateRadar() end
-        -- auto-perf memory cleaner occasionally
         if Config.MemoryCleaner and tick() % 5 < 0.05 then
             collectgarbage("collect")
         end
@@ -865,14 +820,12 @@ if WindUI then
         }
     })
 
-    -- ESP Tab
     local ESPTab = Window:Tab({Title = "ESP", Icon = "eye"})
     ESPTab:Toggle({Title = "Enable ESP", Desc = "Hiển thị người chơi", Default = Config.ESPEnabled, Callback = function(state) Config.ESPEnabled = state saveConfig() end})
     ESPTab:Toggle({Title = "Team Check ESP", Desc = "Chỉ hiện người khác team", Default = Config.ESPTeamCheck, Callback = function(state) Config.ESPTeamCheck = state saveConfig() end})
     ESPTab:Toggle({Title = "Wall Check", Desc = "Ẩn người chơi bị che khuất", Default = Config.ESPWallCheck, Callback = function(state) Config.ESPWallCheck = state saveConfig() end})
     ESPTab:Slider({Title = "ESP Distance", Min = 50, Max = 500, Default = Config.ESPDistance, Callback = function(value) Config.ESPDistance = value saveConfig() end})
 
-    -- Aimbot Tab
     local AimTab = Window:Tab({Title = "Aimbot", Icon = "target"})
     AimTab:Toggle({Title = "Enable AIM", Desc = "Aim vào đầu đối thủ", Default = Config.AimEnabled, Callback = function(state) Config.AimEnabled = state saveConfig() updateAimFOVCircle() end})
     AimTab:Toggle({Title = "Team Check AIM", Desc = "Chỉ aim người khác team", Default = Config.AimTeamCheck, Callback = function(state) Config.AimTeamCheck = state saveConfig() end})
@@ -886,47 +839,40 @@ if WindUI then
         print("[.binh Hub] Press a key or mouse button to bind AimKey...")
     end})
 
-    -- Movement Tab
     local MoveTab = Window:Tab({Title = "Movement", Icon = "arrow-up-right"})
     MoveTab:Toggle({Title = "Fly", Desc = "Bay tự do WSAD + Space + Ctrl", Default = Config.FlyEnabled, Callback = function(state) enableFly(state) saveConfig() end})
     MoveTab:Toggle({Title = "Noclip", Desc = "Đi xuyên tường", Default = Config.NoclipEnabled, Callback = function(state) enableNoclip(state) saveConfig() end})
     MoveTab:Toggle({Title = "Anti Fling", Desc = "Chống văng nhân vật bởi lực ngoài", Default = Config.AntiFlingEnabled, Callback = function(state) enableAntiFling(state) saveConfig() end})
     MoveTab:Slider({Title = "Fly Speed", Min = 10, Max = 250, Default = Config.FlySpeed, Callback = function(v) Config.FlySpeed = v saveConfig() end})
 
-    -- Teleport Tab
     local TeleportTab = Window:Tab({Title = "Teleport", Icon = "navigation"})
     TeleportTab:Toggle({Title = "Enable Teleport", Desc = "Kích hoạt hệ thống dịch chuyển", Default = Config.TeleportEnabled, Callback = function(state) Config.TeleportEnabled = state saveConfig() end})
     TeleportTab:Toggle({Title = "Lưu Vị Trí", Desc = "Cho phép lưu vị trí vào slot", Default = Config.SavePositionsEnabled, Callback = function(state) Config.SavePositionsEnabled = state saveConfig() end})
-    TeleportTab:Button({Title = "💾 Lưu Vị Trí 1", Desc = "Lưu vị trí hiện tại vào slot 1", Callback = function() if Config.SavePositionsEnabled then saveCurrentPosition("Position1") else print("[.binh Hub] Enable Save Positions first!") end end})
-    TeleportTab:Button({Title = "🚀 Dịch đến Vị Trí 1", Desc = "Dịch đến slot 1", Callback = function() if Config.TeleportEnabled then teleportToSaved("Position1") else print("[.binh Hub] Enable Teleport first!") end end})
-    TeleportTab:Button({Title = "🏠 Dịch đến Spawn", Desc = "Dịch đến spawn point", Callback = function() if Config.TeleportEnabled then teleportToSpawn() else print("[.binh Hub] Enable Teleport first!") end end})
-    TeleportTab:Button({Title = "🎯 Dịch đến Mục Tiêu", Desc = "Dịch đến objective", Callback = function() if Config.TeleportEnabled then teleportToObjective() else print("[.binh Hub] Enable Teleport first!") end end})
-    TeleportTab:Button({Title = "🛡️ Dịch đến Vị Trí An Toàn", Desc = "Dịch đến safe spot", Callback = function() if Config.TeleportEnabled then teleportToSafeSpot() else print("[.binh Hub] Enable Teleport first!") end end})
+    TeleportTab:Button({Title = "💾 Lưu Vị Trí 1", Desc = "Lưu vị trí hiện tại vào slot 1", Callback = function() if Config.SavePositionsEnabled then saveCurrentPosition("Position1") else print("[.binh Hub] Enable save position!") end end})
+    TeleportTab:Button({Title = "🚀 Dịch đến Vị Trí 1", Desc = "Dịch đến slot 1", Callback = function() if Config.TeleportEnabled then teleportToSaved("Position1") else print("[.binh Hub] Enable Teleport!") end end})
+    TeleportTab:Button({Title = "🏠 Dịch đến Spawn", Desc = "Dịch đến spawn point", Callback = function() if Config.TeleportEnabled then teleportToSpawn() else print("[.binh Hub] Enable Teleport!") end end})
+    TeleportTab:Button({Title = "🎯 Dịch đến Mục Tiêu", Desc = "Dịch đến objective", Callback = function() if Config.TeleportEnabled then teleportToObjective() else print("[.binh Hub] Enable Teleport!") end end})
+    TeleportTab:Button({Title = "🛡️ Dịch đến Vị Trí An Toàn", Desc = "Dịch đến safe spot", Callback = function() if Config.TeleportEnabled then teleportToSafeSpot() else print("[.binh Hub] Enable Teleport!") end end})
 
-    -- Radar Tab
     local RadarTab = Window:Tab({Title = "Radar", Icon = "map"})
     RadarTab:Toggle({Title = "Enable Radar", Desc = "Bật/tắt radar minimap", Default = Config.RadarEnabled, Callback = function(state) Config.RadarEnabled = state if state then createRadar() else destroyRadar() end saveConfig() end})
     RadarTab:Toggle({Title = "Enemy FOV", Desc = "Hiển thị tầm nhìn của kẻ địch", Default = Config.ShowEnemyFOV, Callback = function(state) Config.ShowEnemyFOV = state saveConfig() end})
     RadarTab:Toggle({Title = "Sound Visualization", Desc = "Hiển thị vị trí âm thanh", Default = Config.SoundVisualization, Callback = function(state) Config.SoundVisualization = state saveConfig() end})
     RadarTab:Toggle({Title = "Objective Tracker", Desc = "Theo dõi mục tiêu", Default = Config.ObjectiveTracker, Callback = function(state) Config.ObjectiveTracker = state saveConfig() end})
 
-    -- Performance Tab
     local PerformanceTab = Window:Tab({Title = "Performance", Icon = "zap"})
     PerformanceTab:Toggle({Title = "Performance Mode", Desc = "Bật tối ưu hiệu suất", Default = Config.PerformanceEnabled, Callback = function(state) togglePerformance(state) saveConfig() end})
     PerformanceTab:Toggle({Title = "Auto FPS Boost", Desc = "Tự động tăng FPS", Default = Config.AutoFPSBoost, Callback = function(state) Config.AutoFPSBoost = state saveConfig() end})
     PerformanceTab:Toggle({Title = "Memory Cleaner", Desc = "Dọn bộ nhớ", Default = Config.MemoryCleaner, Callback = function(state) Config.MemoryCleaner = state saveConfig() end})
     PerformanceTab:Toggle({Title = "Render Distance Manager", Desc = "Quản lý distance", Default = Config.RenderDistanceManager, Callback = function(state) Config.RenderDistanceManager = state saveConfig() end})
 
-    -- Settings Tab
     local SettingsTab = Window:Tab({Title = "Settings", Icon = "settings"})
     SettingsTab:Button({Title = "Save Config", Desc = "Lưu cấu hình vào file", Callback = function() saveConfig() end})
     SettingsTab:Button({Title = "Load Config", Desc = "Tải cấu hình", Callback = function() loadConfig() end})
     SettingsTab:Dropdown({Title = "Theme", List = {"Default","Dark","Blue","Pink"}, Callback = function(theme) applyTheme(theme) saveConfig() end})
-end -- end WindUI
+end
 
--- finalize initial drawing + radar creation
 updateAimFOVCircle()
 if Config.RadarEnabled then createRadar() end
 
 print("[.binh Hub] Full script 1-7 loaded. Enjoy!")
-
