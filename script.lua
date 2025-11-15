@@ -33,12 +33,12 @@ local SmoothStrength = 0.25
 local FlyEnabled = false
 local NoclipEnabled = false
 
--- Create WindUI Window
+-- Create WindUI Window (Logo updated here)
 local Window = WindUI:CreateWindow({
     Title = ".binh Hub | WindUI",
     Author = "by .binh",
     Folder = "binh",
-    Icon = "sfsymbols:appleLogo",
+    Icon = "https://github.com/philiptran16-png/binh-script/blob/main/Minimalistic%20and%20elegant%20_B_%20logo%2C%20monochrome%2C%20no%20colors%2C%20clean%20lines%2C%20modern%20design%2C%20geometric%20and%20balanced%2C%20high%20contrast%2C%20sharp%20edges%2C%20professional%20and%20sophisticated%2C%20suitable%20for%20branding%2C%20isolated%20on%20w.jpg",
     IconSize = 44,
     NewElements = true,
     OpenButton = {
