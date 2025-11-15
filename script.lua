@@ -35,9 +35,9 @@ local NoclipEnabled = false
 
 -- Create WindUI Window
 local Window = WindUI:CreateWindow({
-    Title = ".ftgs Hub | WindUI",
-    Author = "by .ftgs",
-    Folder = "ftgshub",
+    Title = ".binh Hub | WindUI",
+    Author = "by .binh",
+    Folder = "binh",
     Icon = "sfsymbols:appleLogo",
     IconSize = 44,
     NewElements = true,
