@@ -219,7 +219,42 @@ local function isVisible(part)
     return hit == nil or hit:IsDescendantOf(part.Parent)
 end
 
--- Radar UI (simple drawing)
+-- ESP setup: always working after respawn/death
+local function setupESP(plr)
+    plr.CharacterAdded:Connect(function(char)
+        char:WaitForChild("Head", 5)
+        RunService.RenderStepped:Connect(function()
+            local head = char:FindFirstChild("Head")
+            if plr ~= player and head then
+                if ESPEnabled then
+                    if ESPTeamCheck and plr.Team == player.Team then return end
+                    if ESPWallCheck and not isVisible(head) then return end
+                    if not char:FindFirstChild("Highlight") then
+                        local hl = Instance.new("Highlight")
+                        hl.Name = "Highlight"
+                        hl.Parent = char
+                        hl.FillColor = Color3.fromRGB(0,255,0)
+                        hl.OutlineColor = Color3.fromRGB(255,255,255)
+                        hl.FillTransparency = 0.5
+                    end
+                else
+                    local hl = char:FindFirstChild("Highlight")
+                    if hl then hl:Destroy() end
+                end
+            end
+        end)
+    end)
+end
+
+for _,plr in ipairs(Players:GetPlayers()) do
+    if plr ~= player then setupESP(plr) end
+end
+
+Players.PlayerAdded:Connect(function(plr)
+    if plr ~= player then setupESP(plr) end
+end)
+
+-- Radar UI
 local radarGui
 local function createRadar()
     if radarGui then radarGui:Destroy() end
@@ -279,33 +314,9 @@ local function updateRadar(radarFrame)
     plFrame.ZIndex = 12
 end
 
--- Main Loop
+-- Main Loop (chỉ các chức năng khác, ESP đã fix bằng sự kiện)
 local radarFrameInstance
 RunService.RenderStepped:Connect(function()
-    -- ESP
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr.Character and plr ~= player then
-            local head = plr.Character:FindFirstChild("Head")
-            if head then
-                if ESPEnabled then
-                    if ESPTeamCheck and plr.Team == player.Team then continue end
-                    if ESPWallCheck and not isVisible(head) then continue end
-                    if not plr.Character:FindFirstChild("Highlight") then
-                        local hl = Instance.new("Highlight")
-                        hl.Name = "Highlight"
-                        hl.Parent = plr.Character
-                        hl.FillColor = Color3.fromRGB(0,255,0)
-                        hl.OutlineColor = Color3.fromRGB(255,255,255)
-                        hl.FillTransparency = 0.5
-                    end
-                else
-                    local hl = plr.Character:FindFirstChild("Highlight")
-                    if hl then hl:Destroy() end
-                end
-            end
-        end
-    end
-
     -- Aimbot
     if AimEnabled then
         local nearestHead = nil
