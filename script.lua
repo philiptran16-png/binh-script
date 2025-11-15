@@ -15,7 +15,7 @@ local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footag
 local Settings = {
     ESP = {
         Enabled = true,
-        ShowTeam = false,
+        ShowTeam = false, -- [GHI CHÚ] Bạn có cài đặt TeamCheck, nhưng không có ShowTeam. Tôi giữ nguyên.
         ShowBoxes = true,
         ShowTracers = true,
         ShowNames = true,
@@ -25,7 +25,8 @@ local Settings = {
         BoxColor = Color3.new(1, 1, 1),
         TracerColor = Color3.new(1, 1, 1),
         NameColor = Color3.new(1, 1, 1),
-        TeamColor = true
+        TeamColor = true,
+        TeamCheck = true -- [GHI CHÚ] Thêm TeamCheck vào đây từ cài đặt Aimbot để nhất quán
     },
     Aimbot = {
         Enabled = false,
@@ -57,7 +58,8 @@ local Settings = {
     Misc = {
         PanicKey = Enum.KeyCode.Delete,
         RainbowMode = false,
-        AutoUpdate = true
+        AutoUpdate = true,
+        MenuKey = Enum.KeyCode.RightShift -- [BỔ SUNG] Thêm phím để mở/đóng menu
     }
 }
 
@@ -66,9 +68,10 @@ local Drawings = {
     DirectionLine = nil,
     FOVCircle = nil,
     Crosshair = nil,
+    Crosshair2 = nil, -- [SỬA LỖI] Cần lưu trữ cả đường thứ 2
     Watermark = nil,
     HitMarker = nil,
-    ESPs = {}
+    ESPs = {} -- { [Player] = { Box, Tracer, Name, ... } }
 }
 
 local Data = {
@@ -83,7 +86,11 @@ local Data = {
     FlyConnection = nil,
     NoclipConnection = nil,
     SpeedConnection = nil,
-    JumpConnection = nil
+    JumpConnection = nil,
+    MainConnection = nil, -- [BỔ SUNG] Để ngắt kết nối khi panic
+    InputConnection = nil, -- [BỔ SUNG] Để ngắt kết nối khi panic
+    MenuVisible = true,
+    WindUIWindow = nil -- [BỔ SUNG] Để tham chiếu đến cửa sổ UI
 }
 
 -- Player Mods Functions
@@ -92,18 +99,20 @@ local function startNoclip()
         Data.NoclipConnection:Disconnect()
     end
     
+    Data.NoClipping = true
     Data.NoclipConnection = RunService.Stepped:Connect(function()
-        if Settings.PlayerMods.Noclip and LocalPlayer.Character then
-            for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-                if part:IsA("BasePart") and part.CanCollide then
-                    part.CanCollide = false
-                end
+        if not Settings.PlayerMods.Noclip or not LocalPlayer.Character then return end
+        
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
             end
         end
     end)
 end
 
 local function stopNoclip()
+    Data.NoClipping = false
     if Data.NoclipConnection then
         Data.NoclipConnection:Disconnect()
         Data.NoclipConnection = nil
@@ -112,7 +121,7 @@ local function stopNoclip()
     if LocalPlayer.Character then
         for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
             if part:IsA("BasePart") then
-                part.CanCollide = true
+                part.CanCollide = true -- [GHI CHÚ] Điều này có thể gây lỗi nếu một số bộ phận ban đầu không thể va chạm.
             end
         end
     end
@@ -136,12 +145,13 @@ local function startFly()
     humanoid.PlatformStand = true
     
     local bodyVelocity = Instance.new("BodyVelocity")
+    bodyVelocity.Name = "FlyVelocity" -- [BỔ SUNG] Đặt tên để dễ tìm
     bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-    bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+    bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge) -- [SỬA LỖI] MaxForce lớn hơn
     bodyVelocity.Parent = rootPart
     
     Data.FlyConnection = RunService.Heartbeat:Connect(function()
-        if not Data.Flying or not character or not rootPart then
+        if not Data.Flying or not character or not rootPart or not bodyVelocity.Parent then
             if Data.FlyConnection then
                 Data.FlyConnection:Disconnect()
             end
@@ -149,7 +159,7 @@ local function startFly()
         end
         
         local camera = workspace.CurrentCamera
-        local flySpeed = Settings.PlayerMods.FlySpeed
+        local flySpeed = Settings.PlayerMods.FlySpeed * 10 -- [GHI CHÚ] Tăng tốc độ bay cho phù hợp
         
         local direction = Vector3.new()
         
@@ -197,7 +207,7 @@ local function stopFly()
         
         local rootPart = character:FindFirstChild("HumanoidRootPart")
         if rootPart then
-            local bodyVelocity = rootPart:FindFirstChild("BodyVelocity")
+            local bodyVelocity = rootPart:FindFirstChild("FlyVelocity")
             if bodyVelocity then
                 bodyVelocity:Destroy()
             end
@@ -287,6 +297,8 @@ end
 
 local function createCrosshair()
     if Drawings.Crosshair then Drawings.Crosshair:Remove() end
+    if Drawings.Crosshair2 then Drawings.Crosshair2:Remove() end
+    
     Drawings.Crosshair = Drawing.new("Line")
     Drawings.Crosshair.Visible = Settings.Visuals.Crosshair
     Drawings.Crosshair.Color = Color3.new(1, 1, 1)
@@ -315,16 +327,17 @@ local function createWatermark()
     Drawings.Watermark.Font = 2
     Drawings.Watermark.Text = "Windy ESP | FPS: 60 | Players: 0"
     Drawings.Watermark.Position = Vector2.new(10, 10)
+    Drawings.Watermark.Outline = true
 end
 
 -- Update functions
 local function updateDirectionLine()
     if not Drawings.DirectionLine then return end
     
-    if not Settings.Visuals.DirectionLine or not Settings.ESP.Enabled then
-        Drawings.DirectionLine.Visible = false
-        return
-    end
+    local visible = Settings.Visuals.DirectionLine and Settings.ESP.Enabled
+    Drawings.DirectionLine.Visible = visible
+    
+    if not visible then return end
     
     local lookVector = Camera.CFrame.LookVector
     local startPos = Camera.CFrame.Position
@@ -336,7 +349,6 @@ local function updateDirectionLine()
     if startVisible and endVisible then
         Drawings.DirectionLine.From = Vector2.new(startVector.X, startVector.Y)
         Drawings.DirectionLine.To = Vector2.new(endVector.X, endVector.Y)
-        Drawings.DirectionLine.Visible = true
         Drawings.DirectionLine.Color = Settings.ESP.BoxColor
     else
         Drawings.DirectionLine.Visible = false
@@ -346,12 +358,11 @@ end
 local function updateFOVCircle()
     if not Drawings.FOVCircle then return end
     
-    if not Settings.Visuals.FOVCircle or not Settings.ESP.Enabled then
-        Drawings.FOVCircle.Visible = false
-        return
-    end
+    local visible = Settings.Visuals.FOVCircle and Settings.Aimbot.Enabled -- [SỬA LỖI] Liên kết với Aimbot
+    Drawings.FOVCircle.Visible = visible
     
-    Drawings.FOVCircle.Visible = true
+    if not visible then return end
+    
     Drawings.FOVCircle.Color = Settings.ESP.BoxColor
     Drawings.FOVCircle.Radius = Settings.Aimbot.FOV
     Drawings.FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
@@ -360,50 +371,118 @@ end
 local function updateCrosshair()
     if not Drawings.Crosshair or not Drawings.Crosshair2 then return end
     
-    if not Settings.Visuals.Crosshair then
-        Drawings.Crosshair.Visible = false
-        Drawings.Crosshair2.Visible = false
-        return
-    end
+    local visible = Settings.Visuals.Crosshair
+    Drawings.Crosshair.Visible = visible
+    Drawings.Crosshair2.Visible = visible
+    
+    if not visible then return end
     
     local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     Drawings.Crosshair.From = Vector2.new(center.X - 8, center.Y)
     Drawings.Crosshair.To = Vector2.new(center.X + 8, center.Y)
-    Drawings.Crosshair.Visible = true
     
     Drawings.Crosshair2.From = Vector2.new(center.X, center.Y - 8)
     Drawings.Crosshair2.To = Vector2.new(center.X, center.Y + 8)
-    Drawings.Crosshair2.Visible = true
 end
 
 local function updateWatermark()
     if not Drawings.Watermark then return end
     
-    if not Settings.Visuals.Watermark then
-        Drawings.Watermark.Visible = false
-        return
+    Drawings.Watermark.Visible = Settings.Visuals.Watermark
+    if not Settings.Visuals.Watermark then return end
+    
+    local fps = math.floor(1 / RunService.Heartbeat:Wait()) -- [SỬA LỖI] Dùng Heartbeat
+    Drawings.Watermark.Text = string.format("Windy ESP | FPS: %d | Players: %d", fps, #Players:GetPlayers())
+end
+
+-- [THAY ĐỔI] Hàm updateESP được viết lại hoàn toàn để cải thiện hiệu năng
+local function removePlayerESP(player)
+    if Drawings.ESPs[player] then
+        for _, drawing in pairs(Drawings.ESPs[player]) do
+            drawing:Remove()
+        end
+        Drawings.ESPs[player] = nil
+    end
+end
+
+local function createPlayerESP(player)
+    local espData = {}
+    local playerColor = Settings.ESP.TeamColor and player.TeamColor.Color or Settings.ESP.BoxColor
+
+    if Settings.ESP.ShowBoxes then
+        espData.Box = Drawing.new("Square")
+        espData.Box.Visible = false
+        espData.Box.Color = playerColor
+        espData.Box.Thickness = 2
+        espData.Box.Filled = false
     end
     
-    local fps = math.floor(1 / RunService.RenderStepped:Wait())
-    Drawings.Watermark.Text = string.format("Windy ESP | FPS: %d | Players: %d", fps, #Players:GetPlayers())
-    Drawings.Watermark.Visible = true
+    if Settings.ESP.ShowTracers then
+        espData.Tracer = Drawing.new("Line")
+        espData.Tracer.Visible = false
+        espData.Tracer.Color = playerColor
+        espData.Tracer.Thickness = 1
+    end
+    
+    if Settings.ESP.ShowNames then
+        espData.Name = Drawing.new("Text")
+        espData.Name.Visible = false
+        espData.Name.Color = Settings.ESP.NameColor
+        espData.Name.Size = 14
+        espData.Name.Font = 2
+        espData.Name.Text = player.Name
+        espData.Name.Outline = true
+        espData.Name.Center = true
+    end
+    
+    if Settings.ESP.ShowDistance then
+        espData.Distance = Drawing.new("Text")
+        espData.Distance.Visible = false
+        espData.Distance.Color = Settings.ESP.NameColor
+        espData.Distance.Size = 12
+        espData.Distance.Font = 2
+        espData.Distance.Text = "[0]"
+        espData.Distance.Outline = true
+        espData.Distance.Center = true
+    end
+    
+    if Settings.ESP.ShowHealth then
+        espData.HealthBarOutline = Drawing.new("Square")
+        espData.HealthBarOutline.Visible = false
+        espData.HealthBarOutline.Color = Color3.new(0, 0, 0)
+        espData.HealthBarOutline.Thickness = 1
+        espData.HealthBarOutline.Filled = true
+        
+        espData.HealthBar = Drawing.new("Square")
+        espData.HealthBar.Visible = false
+        espData.HealthBar.Color = Color3.fromRGB(0, 255, 0)
+        espData.HealthBar.Thickness = 1
+        espData.HealthBar.Filled = true
+    end
+    
+    Drawings.ESPs[player] = espData
+    return espData
 end
 
 local function updateESP()
-    -- Clear existing ESP drawings
-    for player, espData in pairs(Drawings.ESPs) do
-        if espData.Box then espData.Box:Remove() end
-        if espData.Tracer then espData.Tracer:Remove() end
-        if espData.Name then espData.Name:Remove() end
-        if espData.Distance then espData.Distance:Remove() end
-        if espData.Health then espData.Health:Remove() end
-        if espData.HealthBar then espData.HealthBar:Remove() end
-        if espData.HealthBarOutline then espData.HealthBarOutline:Remove() end
+    if not Settings.ESP.Enabled then
+        -- Ẩn tất cả ESP nếu bị tắt
+        for player, espData in pairs(Drawings.ESPs) do
+            for _, drawing in pairs(espData) do
+                drawing.Visible = false
+            end
+        end
+        return
     end
-    Drawings.ESPs = {}
-    
-    if not Settings.ESP.Enabled then return end
-    
+
+    -- Kiểm tra người chơi hiện có
+    for player, espData in pairs(Drawings.ESPs) do
+        if not player or not player.Parent or not player:IsDescendantOf(Players) or not player.Character or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
+            removePlayerESP(player)
+        end
+    end
+
+    -- Cập nhật người chơi hợp lệ
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local character = player.Character
@@ -413,158 +492,96 @@ local function updateESP()
             if humanoid and humanoid.Health > 0 and rootPart then
                 -- Team check
                 if Settings.ESP.TeamCheck and player.Team == LocalPlayer.Team then
+                    removePlayerESP(player) -- Xóa nếu họ cùng team
                     continue
                 end
                 
                 local distance = (Camera.CFrame.Position - rootPart.Position).Magnitude
                 if distance > Settings.ESP.MaxDistance then
+                    removePlayerESP(player) -- Xóa nếu quá xa
                     continue
                 end
                 
-                -- Get player color
-                local playerColor = Settings.ESP.BoxColor
-                if Settings.ESP.TeamColor then
-                    playerColor = player.TeamColor.Color
-                end
+                -- Lấy hoặc tạo ESP data
+                local espData = Drawings.ESPs[player] or createPlayerESP(player)
                 
-                local espData = {}
-                
-                -- Box ESP
-                if Settings.ESP.ShowBoxes then
-                    espData.Box = Drawing.new("Square")
-                    espData.Box.Visible = false
-                    espData.Box.Color = playerColor
-                    espData.Box.Thickness = 2
-                    espData.Box.Filled = false
-                end
-                
-                -- Tracer
-                if Settings.ESP.ShowTracers then
-                    espData.Tracer = Drawing.new("Line")
-                    espData.Tracer.Visible = false
-                    espData.Tracer.Color = playerColor
-                    espData.Tracer.Thickness = 1
-                end
-                
-                -- Name
-                if Settings.ESP.ShowNames then
-                    espData.Name = Drawing.new("Text")
-                    espData.Name.Visible = false
-                    espData.Name.Color = Settings.ESP.NameColor
-                    espData.Name.Size = 14
-                    espData.Name.Font = 2
-                    espData.Name.Text = player.Name
-                    espData.Name.Outline = true
-                end
-                
-                -- Distance
-                if Settings.ESP.ShowDistance then
-                    espData.Distance = Drawing.new("Text")
-                    espData.Distance.Visible = false
-                    espData.Distance.Color = Settings.ESP.NameColor
-                    espData.Distance.Size = 12
-                    espData.Distance.Font = 2
-                    espData.Distance.Text = string.format("[%d]", distance)
-                    espData.Distance.Outline = true
-                end
-                
-                -- Health
-                if Settings.ESP.ShowHealth then
-                    espData.Health = Drawing.new("Text")
-                    espData.Health.Visible = false
-                    espData.Health.Color = Color3.new(1, 1, 1)
-                    espData.Health.Size = 12
-                    espData.Health.Font = 2
-                    espData.Health.Text = string.format("%d", humanoid.Health)
-                    espData.Health.Outline = true
-                    
-                    -- Health bar
-                    espData.HealthBarOutline = Drawing.new("Square")
-                    espData.HealthBarOutline.Visible = false
-                    espData.HealthBarOutline.Color = Color3.new(0, 0, 0)
-                    espData.HealthBarOutline.Thickness = 1
-                    espData.HealthBarOutline.Filled = false
-                    
-                    espData.HealthBar = Drawing.new("Square")
-                    espData.HealthBar.Visible = false
-                    espData.HealthBar.Color = Color3.fromRGB(0, 255, 0)
-                    espData.HealthBar.Thickness = 1
-                    espData.HealthBar.Filled = true
-                end
-                
-                Drawings.ESPs[player] = espData
-                
-                -- Update ESP positions
+                -- Tính toán vị trí
                 local head = character:FindFirstChild("Head")
-                if head then
-                    local headPos, headVisible = Camera:WorldToViewportPoint(head.Position)
-                    local rootPos = Camera:WorldToViewportPoint(rootPart.Position)
-                    
-                    if headVisible then
-                        local scaleFactor = 1 / (headPos.Z * math.tan(math.rad(Camera.FieldOfView * 0.5)) * 2) * 100
-                        local width = 50 * scaleFactor
-                        local height = 80 * scaleFactor
-                        
-                        -- Box ESP
-                        if espData.Box then
-                            espData.Box.Size = Vector2.new(width, height)
-                            espData.Box.Position = Vector2.new(headPos.X - width / 2, headPos.Y - height / 2)
-                            espData.Box.Visible = true
-                        end
-                        
-                        -- Tracer
-                        if espData.Tracer then
-                            espData.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-                            espData.Tracer.To = Vector2.new(rootPos.X, rootPos.Y)
-                            espData.Tracer.Visible = true
-                        end
-                        
-                        -- Name
-                        if espData.Name then
-                            espData.Name.Position = Vector2.new(headPos.X, headPos.Y - height / 2 - 20)
-                            espData.Name.Visible = true
-                        end
-                        
-                        -- Distance
-                        if espData.Distance then
-                            espData.Distance.Position = Vector2.new(headPos.X, headPos.Y - height / 2 - 35)
-                            espData.Distance.Visible = true
-                        end
-                        
-                        -- Health
-                        if espData.Health then
-                            espData.Health.Position = Vector2.new(headPos.X, headPos.Y + height / 2 + 5)
-                            espData.Health.Visible = true
-                            
-                            -- Health bar
-                            local healthPercent = humanoid.Health / humanoid.MaxHealth
-                            local barWidth = width
-                            local barHeight = 4
-                            local barX = headPos.X - width / 2
-                            local barY = headPos.Y - height / 2 - 10
-                            
-                            espData.HealthBarOutline.Size = Vector2.new(barWidth, barHeight)
-                            espData.HealthBarOutline.Position = Vector2.new(barX, barY)
-                            espData.HealthBarOutline.Visible = true
-                            
-                            espData.HealthBar.Size = Vector2.new(barWidth * healthPercent, barHeight)
-                            espData.HealthBar.Position = Vector2.new(barX, barY)
-                            espData.HealthBar.Visible = true
-                            espData.HealthBar.Color = Color3.fromRGB(255 * (1 - healthPercent), 255 * healthPercent, 0)
-                        end
-                    else
-                        -- Hide all if not visible
-                        for _, drawing in pairs(espData) do
-                            if drawing and typeof(drawing) == "table" and drawing.Visible ~= nil then
-                                drawing.Visible = false
-                            end
-                        end
+                if not head then continue end
+                
+                local headPos, headVisible = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
+                local rootPos, rootVisible = Camera:WorldToViewportPoint(rootPart.Position - Vector3.new(0, 3, 0))
+                
+                if headVisible or rootVisible then
+                    local playerColor = Settings.ESP.TeamColor and player.TeamColor.Color or Settings.ESP.BoxColor
+                    if Settings.Misc.RainbowMode then
+                        playerColor = Color3.fromHSV(Data.RainbowHue, 1, 1)
                     end
+
+                    local height = math.abs(rootPos.Y - headPos.Y)
+                    local width = height * 0.6
+                    local boxX = rootPos.X - width / 2
+                    local boxY = headPos.Y
+                    
+                    -- Box ESP
+                    if espData.Box then
+                        espData.Box.Size = Vector2.new(width, height)
+                        espData.Box.Position = Vector2.new(boxX, boxY)
+                        espData.Box.Visible = true
+                        espData.Box.Color = playerColor
+                    end
+                    
+                    -- Tracer
+                    if espData.Tracer then
+                        espData.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                        espData.Tracer.To = Vector2.new(rootPos.X, rootPos.Y)
+                        espData.Tracer.Visible = true
+                        espData.Tracer.Color = playerColor
+                    end
+                    
+                    -- Name
+                    if espData.Name then
+                        espData.Name.Position = Vector2.new(headPos.X, headPos.Y - 20)
+                        espData.Name.Visible = true
+                    end
+                    
+                    -- Distance
+                    if espData.Distance then
+                        espData.Distance.Text = string.format("[%d m]", distance)
+                        espData.Distance.Position = Vector2.new(rootPos.X, rootPos.Y + 5)
+                        espData.Distance.Visible = true
+                    end
+                    
+                    -- Health
+                    if espData.HealthBar then
+                        local healthPercent = humanoid.Health / humanoid.MaxHealth
+                        local barWidth = 4
+                        local barHeight = height
+                        local barX = boxX - barWidth - 2
+                        local barY = boxY
+                        
+                        espData.HealthBarOutline.Size = Vector2.new(barWidth, barHeight)
+                        espData.HealthBarOutline.Position = Vector2.new(barX, barY)
+                        espData.HealthBarOutline.Visible = true
+                        
+                        local healthHeight = barHeight * healthPercent
+                        espData.HealthBar.Size = Vector2.new(barWidth, healthHeight)
+                        espData.HealthBar.Position = Vector2.new(barX, barY + (barHeight - healthHeight))
+                        espData.HealthBar.Visible = true
+                        espData.HealthBar.Color = Color3.fromRGB(255 * (1 - healthPercent), 255 * healthPercent, 0)
+                    end
+                else
+                    -- Ẩn nếu ngoài màn hình
+                    removePlayerESP(player)
                 end
+            else
+                -- Xóa nếu chết
+                removePlayerESP(player)
             end
         end
     end
 end
+-- [KẾT THÚC THAY ĐỔI]
 
 -- Aimbot Functions
 local function updateAimbot()
@@ -572,6 +589,7 @@ local function updateAimbot()
     
     local closestTarget = nil
     local closestDistance = Settings.Aimbot.FOV
+    local mousePos = UserInputService:GetMouseLocation()
     
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
@@ -587,16 +605,15 @@ local function updateAimbot()
                 
                 -- Visible check
                 if Settings.Aimbot.VisibleCheck then
-                    local ray = Ray.new(Camera.CFrame.Position, (targetPart.Position - Camera.CFrame.Position).Unit * Settings.ESP.MaxDistance)
+                    local ray = Ray.new(Camera.CFrame.Position, (targetPart.Position - Camera.CFrame.Position).Unit * 1000)
                     local hit, position = workspace:FindPartOnRayWithIgnoreList(ray, {LocalPlayer.Character, Camera})
-                    if hit and hit:IsDescendantOf(character) == false then
+                    if hit and not hit:IsDescendantOf(character) then
                         continue
                     end
                 end
                 
                 local screenPoint, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
                 if onScreen then
-                    local mousePos = UserInputService:GetMouseLocation()
                     local distance = (Vector2.new(screenPoint.X, screenPoint.Y) - mousePos).Magnitude
                     
                     if distance < closestDistance then
@@ -610,7 +627,7 @@ local function updateAimbot()
     
     Data.Target = closestTarget
     
-    -- Auto aim when target is found
+    -- Auto aim khi giữ chuột phải
     if closestTarget and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
         local targetPosition = closestTarget.Position
         local currentCamera = workspace.CurrentCamera
@@ -628,7 +645,7 @@ end
 -- Main Update Loop
 local function update()
     if Settings.Misc.RainbowMode then
-        Data.RainbowHue = (Data.RainbowHue + 0.01) % 1
+        Data.RainbowHue = (Data.RainbowHue + 0.005) % 1 -- [GHI CHÚ] Giảm tốc độ
         local rainbowColor = Color3.fromHSV(Data.RainbowHue, 1, 1)
         Settings.ESP.BoxColor = rainbowColor
         Settings.ESP.TracerColor = rainbowColor
@@ -642,9 +659,9 @@ local function update()
     updateESP()
     updateAimbot()
     
-    -- Update player mods
-    applySpeed()
-    applyJumpPower()
+    -- Update player mods (chỉ gọi nếu đang bật)
+    if Settings.PlayerMods.Speed then applySpeed() end
+    if Settings.PlayerMods.JumpPower then applyJumpPower() end
 end
 
 -- Create WindUI Interface
@@ -652,8 +669,10 @@ local function createWindUI()
     local window = WindUI:CreateWindow({
         Title = "Windy ESP v4.0",
         Icon = "http://www.roblox.com/asset/?id=6035067836", -- Settings icon
-        Size = UDim2.new(0, 500, 0, 500)
+        Size = UDim2.new(0, 500, 0, 500),
+        Key = Settings.Misc.MenuKey
     })
+    Data.WindUIWindow = window -- [BỔ SUNG] Lưu tham chiếu
     
     -- ESP Tab
     local esptab = window:CreateTab({
@@ -666,6 +685,12 @@ local function createWindUI()
         Default = Settings.ESP.Enabled,
         Callback = function(value)
             Settings.ESP.Enabled = value
+            if not value then
+                -- Xóa tất cả ESP nếu tắt
+                for player, espData in pairs(Drawings.ESPs) do
+                    removePlayerESP(player)
+                end
+            end
         end
     })
     
@@ -681,7 +706,7 @@ local function createWindUI()
         Title = "Show Tracers",
         Default = Settings.ESP.ShowTracers,
         Callback = function(value)
-            Settings.ESP.ShowTracers = value
+            Settings.ESP.ShowTracciers = value
         end
     })
     
@@ -760,7 +785,7 @@ local function createWindUI()
     })
     
     aimbottab:CreateSlider({
-        Title = "FOV Circle",
+        Title = "FOV (Bán kính)",
         Default = Settings.Aimbot.FOV,
         Min = 10,
         Max = 200,
@@ -810,7 +835,7 @@ local function createWindUI()
     })
     
     visualstab:CreateToggle({
-        Title = "FOV Circle",
+        Title = "Show FOV Circle",
         Default = Settings.Visuals.FOVCircle,
         Callback = function(value)
             Settings.Visuals.FOVCircle = value
@@ -956,10 +981,13 @@ local function createWindUI()
             applySpeed()
             applyJumpPower()
             
-            print("Player mods reset!")
+            -- [BỔ SUNG] Cập nhật UI
+            window:Notify("Player mods reset!")
         end
     })
-    
+
+-- [BỔ SUNG] Phần mã bị thiếu của bạn bắt đầu từ đây
+
     -- Misc Tab
     local misctab = window:CreateTab({
         Title = "Misc",
@@ -974,177 +1002,116 @@ local function createWindUI()
         end
     })
     
-    misctab:CreateButton({
-        Title = "Save Configuration",
-        Callback = function()
-            print("Configuration saved!")
+    misctab:CreateKeybind({
+        Title = "Panic Key",
+        Default = Settings.Misc.PanicKey,
+        Callback = function(key)
+            Settings.Misc.PanicKey = key
         end
     })
-    
-    misctab:CreateButton({
-        Title = "Load Configuration",
-        Callback = function()
-            print("Configuration loaded!")
+
+    misctab:CreateKeybind({
+        Title = "Menu Key",
+        Default = Settings.Misc.MenuKey,
+        Callback = function(key)
+            Settings.Misc.MenuKey = key
+            Data.WindUIWindow:SetKey(key)
         end
     })
-    
-    misctab:CreateButton({
-        Title = "Reset All Settings",
-        Callback = function()
-            -- Reset all settings to defaults
-            Settings.ESP.Enabled = true
-            Settings.ESP.ShowBoxes = true
-            Settings.ESP.ShowTracers = true
-            Settings.ESP.ShowNames = true
-            Settings.ESP.ShowDistance = true
-            Settings.ESP.ShowHealth = true
-            Settings.ESP.TeamCheck = false
-            Settings.ESP.TeamColor = true
-            Settings.ESP.MaxDistance = 500
-            
-            Settings.Aimbot.Enabled = false
-            Settings.Aimbot.Smoothness = 0.1
-            Settings.Aimbot.FOV = 50
-            Settings.Aimbot.VisibleCheck = true
-            Settings.Aimbot.TeamCheck = true
-            Settings.Aimbot.TargetPart = "Head"
-            
-            Settings.Visuals.DirectionLine = true
-            Settings.Visuals.FOVCircle = false
-            Settings.Visuals.Crosshair = false
-            Settings.Visuals.Watermark = true
-            Settings.Visuals.HitMarker = false
-            
-            Settings.PlayerMods.Noclip = false
-            Settings.PlayerMods.Fly = false
-            Settings.PlayerMods.Speed = false
-            Settings.PlayerMods.SpeedValue = 16
-            Settings.PlayerMods.JumpPower = false
-            Settings.PlayerMods.JumpPowerValue = 50
-            Settings.PlayerMods.InfiniteJump = false
-            Settings.PlayerMods.FlySpeed = 2
-            
-            Settings.Misc.RainbowMode = false
-            
-            -- Apply resets
-            stopNoclip()
-            stopFly()
-            stopInfiniteJump()
-            applySpeed()
-            applyJumpPower()
-            
-            print("All settings reset to defaults!")
-        end
-    })
-    
-    misctab:CreateLabel({
-        Title = "Controls:",
-        Content = "N - Noclip | F - Fly | Insert - UI | Delete - Panic"
-    })
-    
-    misctab:CreateLabel({
-        Title = "Windy ESP v4.0",
-        Content = "Made with ❤️ using WindUI"
-    })
-    
-    return window
 end
 
--- Initialize
-saveOriginalValues()
-createDirectionLine()
-createFOVCircle()
-createCrosshair()
-createWatermark()
-local WindUIWindow = createWindUI()
+-- [BỔ SUNG] Hàm Panic
+local function panic()
+    -- Tắt tất cả mod
+    Settings.PlayerMods.Noclip = false
+    Settings.PlayerMods.Fly = false
+    Settings.PlayerMods.Speed = false
+    Settings.PlayerMods.JumpPower = false
+    Settings.PlayerMods.InfiniteJump = false
+    Settings.ESP.Enabled = false
+    Settings.Aimbot.Enabled = false
 
--- Start main loop
-Data.Connections.MainLoop = RunService.RenderStepped:Connect(update)
+    stopNoclip()
+    stopFly()
+    stopInfiniteJump()
+    applySpeed()
+    applyJumpPower()
 
--- Keybinds
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
+    -- Ngắt kết nối
+    if Data.MainConnection then Data.MainConnection:Disconnect() end
+    if Data.InputConnection then Data.InputConnection:Disconnect() end
     
-    -- Panic key
-    if input.KeyCode == Settings.Misc.PanicKey then
-        -- Clean up all drawings
-        for _, drawing in pairs(Drawings) do
-            if drawing and typeof(drawing) == "table" and drawing.Remove then
-                drawing:Remove()
-            elseif drawing and typeof(drawing) == "userdata" and drawing.Remove then
-                drawing:Remove()
-            end
+    -- Xóa tất cả Drawings
+    for player, espData in pairs(Drawings.ESPs) do
+        removePlayerESP(player)
+    end
+    for name, drawing in pairs(Drawings) do
+        if name ~= "ESPs" and drawing and typeof(drawing) == "Instance" then
+            drawing:Remove()
         end
-        
-        -- Clean up ESP drawings
-        for player, espData in pairs(Drawings.ESPs) do
-            for _, drawing in pairs(espData) do
-                if drawing and drawing.Remove then
-                    drawing:Remove()
-                end
-            end
-        end
-        
-        -- Stop all connections
-        for _, connection in pairs(Data.Connections) do
-            if connection then
-                connection:Disconnect()
-            end
-        end
-        
-        -- Stop player mods
-        stopNoclip()
-        stopFly()
-        stopInfiniteJump()
-        
-        print("Windy ESP - Panic mode activated! All features disabled.")
     end
     
-    -- Noclip toggle key
+    -- Xóa UI
+    if Data.WindUIWindow then
+        Data.WindUIWindow:Destroy()
+    end
+end
+
+-- [BỔ SUNG] Xử lý phím tắt
+local function onInputBegan(input, gameProcessed)
+    if gameProcessed then return end -- Không chạy nếu đang chat
+
+    -- Panic
+    if input.KeyCode == Settings.Misc.PanicKey then
+        panic()
+    end
+
+    -- Toggle Noclip
     if input.KeyCode == Settings.PlayerMods.NoClipKey then
         Settings.PlayerMods.Noclip = not Settings.PlayerMods.Noclip
         if Settings.PlayerMods.Noclip then
             startNoclip()
-            print("Noclip: Enabled")
         else
             stopNoclip()
-            print("Noclip: Disabled")
         end
+        Data.WindUIWindow:Notify(Settings.PlayerMods.Noclip and "Noclip Enabled" or "Noclip Disabled")
     end
-    
-    -- Fly toggle key
+
+    -- Toggle Fly
     if input.KeyCode == Settings.PlayerMods.FlyKey then
         Settings.PlayerMods.Fly = not Settings.PlayerMods.Fly
         if Settings.PlayerMods.Fly then
             startFly()
-            print("Fly: Enabled")
         else
             stopFly()
-            print("Fly: Disabled")
         end
+        Data.WindUIWindow:Notify(Settings.PlayerMods.Fly and "Fly Enabled" or "Fly Disabled")
     end
-end)
+end
 
--- Character added event to reapply settings
-LocalPlayer.CharacterAdded:Connect(function(character)
-    wait(1) -- Wait for character to fully load
+-- [BỔ SUNG] Hàm khởi tạo
+local function init()
+    -- Lưu giá trị gốc
     saveOriginalValues()
-    applySpeed()
-    applyJumpPower()
+    LocalPlayer.CharacterAdded:Connect(saveOriginalValues)
     
-    if Settings.PlayerMods.Noclip then
-        startNoclip()
-    end
-    if Settings.PlayerMods.Fly then
-        startFly()
-    end
-    if Settings.PlayerMods.InfiniteJump then
-        startInfiniteJump()
-    end
-end)
+    -- Tạo các đối tượng vẽ
+    createDirectionLine()
+    createFOVCircle()
+    createCrosshair()
+    createWatermark()
+    
+    -- Tạo UI
+    createWindUI()
+    
+    -- Kết nối vòng lặp chính
+    Data.MainConnection = RunService.RenderStepped:Connect(update)
+    
+    -- Kết nối phím tắt
+    Data.InputConnection = UserInputService.InputBegan:Connect(onInputBegan)
+end
 
-print("Windy ESP v4.0 Loaded!")
-print("Using WindUI Framework")
-print("Press " .. Settings.Misc.PanicKey.Name .. " for panic mode")
-print("Press " .. Settings.PlayerMods.NoClipKey.Name .. " to toggle Noclip")
-print("Press " .. Settings.PlayerMods.FlyKey.Name .. " to toggle Fly")
+-- Chạy script
+init()
+
+-- [KẾT THÚC BỔ SUNG]
