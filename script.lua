@@ -32,7 +32,12 @@ local FlyEnabled, NoclipEnabled, RadarEnabled, AntiFlingEnabled = false, false, 
 local PerformanceEnabled, AutoFPSBoost, MemoryCleaner, NetworkOptimizer, RenderDistanceManager = false, false, false, false, false
 local ShowEnemyFOV, PatrolRoutePrediction, SoundVisualization, ObjectiveTracker = false, false, false, false
 local CurrentTheme = "Default"
-local TeleportEnabled, SavePositions, QuickTeleportKeys, SpawnTeleport, ObjectiveTeleport, SafeSpotTeleport = false, false, false, false, false, false
+local TeleportEnabled, SavePositions, SpawnTeleport, ObjectiveTeleport, SafeSpotTeleport = false, false, false, false, false
+
+-- Aimbot FOV System
+local AimFOV = 100
+local ShowAimFOV = false
+local AimFOVCircle = nil
 
 -- Custom Aimbot Key System
 local AimKey = Enum.UserInputType.MouseButton2 -- Default to Right Mouse Button
@@ -81,12 +86,6 @@ local Themes = {
 
 -- Teleport System Variables
 local SavedPositions = {}
-local TeleportHotkeys = {
-    [Enum.KeyCode.F1] = "Position1",
-    [Enum.KeyCode.F2] = "Position2", 
-    [Enum.KeyCode.F3] = "Position3",
-    [Enum.KeyCode.F4] = "Position4"
-}
 
 local config = {
     ESPEnabled = ESPEnabled,
@@ -114,14 +113,34 @@ local config = {
     CurrentTheme = CurrentTheme,
     TeleportEnabled = TeleportEnabled,
     SavePositions = SavePositions,
-    QuickTeleportKeys = QuickTeleportKeys,
     SpawnTeleport = SpawnTeleport,
     ObjectiveTeleport = ObjectiveTeleport,
     SafeSpotTeleport = SafeSpotTeleport,
-    AimKey = AimKey
+    AimKey = AimKey,
+    AimFOV = AimFOV,
+    ShowAimFOV = ShowAimFOV
 }
 
 local CONFIG_FILE = "binh_hub_config.json"
+
+-- Aimbot FOV Circle Drawing
+local function updateAimFOVCircle()
+    if AimFOVCircle then
+        AimFOVCircle:Remove()
+        AimFOVCircle = nil
+    end
+    
+    if ShowAimFOV and AimEnabled then
+        AimFOVCircle = Drawing.new("Circle")
+        AimFOVCircle.Visible = true
+        AimFOVCircle.Thickness = 2
+        AimFOVCircle.Color = Themes[CurrentTheme].Primary
+        AimFOVCircle.Filled = false
+        AimFOVCircle.Transparency = 1
+        AimFOVCircle.Radius = AimFOV
+        AimFOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    end
+end
 
 -- Custom Aimbot Key System
 local function setAimKey(input)
@@ -134,11 +153,6 @@ local function setAimKey(input)
             AimKey = input.UserInputType
             waitingForAimKey = false
             print("[.binh Hub] Aimbot key set to: " .. tostring(AimKey))
-            
-            -- Update the button text
-            if AimTab then
-                -- We'll need to update the UI button text
-            end
         end
     end
 end
@@ -169,6 +183,7 @@ end
 local function teleportToPosition(position)
     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
         player.Character.HumanoidRootPart.CFrame = CFrame.new(position)
+        print("[.binh Hub] Teleported to saved position!")
         return true
     end
     return false
@@ -187,14 +202,9 @@ local function teleportToSpawn()
                 end
             end
         end
+        print("[.binh Hub] Teleported to spawn!")
     else
-        -- Fallback: find any spawn-like object
-        for _, obj in pairs(Workspace:GetDescendants()) do
-            if string.find(string.lower(obj.Name), "spawn") and obj:IsA("Part") then
-                teleportToPosition(obj.Position)
-                break
-            end
-        end
+        print("[.binh Hub] No spawn location found!")
     end
 end
 
@@ -207,6 +217,7 @@ local function teleportToObjective()
         for _, obj in pairs(objectives:GetChildren()) do
             if obj:IsA("Part") then
                 teleportToPosition(obj.Position)
+                print("[.binh Hub] Teleported to objective!")
                 return
             end
         end
@@ -218,9 +229,12 @@ local function teleportToObjective()
             string.find(string.lower(obj.Name), "objective") or
             string.find(string.lower(obj.Name), "point")) and obj:IsA("Part") then
             teleportToPosition(obj.Position)
+            print("[.binh Hub] Teleported to objective!")
             break
         end
     end
+    
+    print("[.binh Hub] No objective found!")
 end
 
 local function findSafeSpot()
@@ -257,17 +271,13 @@ local function findSafeSpot()
     end
 end
 
--- Initialize teleport system
-local function initTeleportSystem()
-    -- Set up hotkey listening
-    if QuickTeleportKeys then
-        UserInputService.InputBegan:Connect(function(input, gameProcessed)
-            if gameProcessed then return end
-            
-            if TeleportHotkeys[input.KeyCode] and SavedPositions[TeleportHotkeys[input.KeyCode]] then
-                teleportToPosition(SavedPositions[TeleportHotkeys[input.KeyCode]])
-            end
-        end)
+local function teleportToSafeSpot()
+    local safeSpot = findSafeSpot()
+    if safeSpot then
+        teleportToPosition(safeSpot)
+        print("[.binh Hub] Teleported to safe spot!")
+    else
+        print("[.binh Hub] No safe spot found!")
     end
 end
 
@@ -502,6 +512,11 @@ local function applyTheme(themeName)
         radarFrame.direction.BackgroundColor3 = theme.Primary
     end
     
+    -- Update FOV circle color
+    if AimFOVCircle then
+        AimFOVCircle.Color = theme.Primary
+    end
+    
     print("[.binh Hub] Applied theme: " .. themeName)
 end
 
@@ -619,10 +634,11 @@ function ESP:Update()
     end
 end
 
--- Aimbot System (UPDATED with custom key support)
+-- Aimbot System (UPDATED with FOV support)
 local function getClosestPlayer()
     local closestPlayer, closestDistance = nil, AimDistance
     local mousePos = UserInputService:GetMouseLocation()
+    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     
     for _, target in pairs(Players:GetPlayers()) do
         if target == player then continue end
@@ -648,9 +664,14 @@ local function getClosestPlayer()
         local vector, onScreen = Camera:WorldToViewportPoint(humanoidRootPart.Position)
         if onScreen then
             local distanceFromMouse = (Vector2.new(mousePos.X, mousePos.Y) - Vector2.new(vector.X, vector.Y)).Magnitude
-            if distanceFromMouse < closestDistance then
-                closestPlayer = target
-                closestDistance = distanceFromMouse
+            local distanceFromCenter = (screenCenter - Vector2.new(vector.X, vector.Y)).Magnitude
+            
+            -- FOV Check: Only target players within the FOV circle
+            if distanceFromCenter <= AimFOV then
+                if distanceFromMouse < closestDistance then
+                    closestPlayer = target
+                    closestDistance = distanceFromMouse
+                end
             end
         end
     end
@@ -779,11 +800,12 @@ local function saveConfig()
     config.CurrentTheme = CurrentTheme
     config.TeleportEnabled = TeleportEnabled
     config.SavePositions = SavePositions
-    config.QuickTeleportKeys = QuickTeleportKeys
     config.SpawnTeleport = SpawnTeleport
     config.ObjectiveTeleport = ObjectiveTeleport
     config.SafeSpotTeleport = SafeSpotTeleport
     config.AimKey = AimKey
+    config.AimFOV = AimFOV
+    config.ShowAimFOV = ShowAimFOV
 
     writefile(CONFIG_FILE, HttpService:JSONEncode(config))
     print("[.binh Hub] Config saved!")
@@ -817,11 +839,12 @@ local function loadConfig()
         CurrentTheme = data.CurrentTheme or "Default"
         TeleportEnabled = data.TeleportEnabled or false
         SavePositions = data.SavePositions or false
-        QuickTeleportKeys = data.QuickTeleportKeys or false
         SpawnTeleport = data.SpawnTeleport or false
         ObjectiveTeleport = data.ObjectiveTeleport or false
         SafeSpotTeleport = data.SafeSpotTeleport or false
         AimKey = data.AimKey or Enum.UserInputType.MouseButton2
+        AimFOV = data.AimFOV or 100
+        ShowAimFOV = data.ShowAimFOV or false
         print("[.binh Hub] Config loaded!")
     else
         print("[.binh Hub] No config file found!")
@@ -831,6 +854,16 @@ end
 -- Main Loops
 RunService.RenderStepped:Connect(function()
     ESP:Update()
+    
+    -- Update FOV circle
+    if ShowAimFOV and AimEnabled then
+        if not AimFOVCircle then
+            updateAimFOVCircle()
+        end
+    elseif AimFOVCircle then
+        AimFOVCircle:Remove()
+        AimFOVCircle = nil
+    end
     
     -- UPDATED: Use custom aim key instead of hardcoded mouse button
     local aimKeyPressed = false
@@ -907,19 +940,32 @@ ESPTab:Toggle({Title = "Team Check ESP", Desc = "Chỉ hiện người khác tea
 ESPTab:Toggle({Title = "Wall Check", Desc = "Ẩn người chơi bị che khuất", Default = ESPWallCheck, Callback = function(state) ESPWallCheck = state end})
 ESPTab:Slider({Title = "ESP Distance", Min = 50, Max = 500, Default = ESPDistance, Callback = function(value) ESPDistance = value end})
 
--- Aimbot Tab (UPDATED with custom key binding)
+-- Aimbot Tab (UPDATED with FOV settings)
 local AimTab = Window:Tab({Title = "Aimbot", Icon = "target"})
-AimTab:Toggle({Title = "Enable AIM", Desc = "Aim vào đầu đối thủ", Default = AimEnabled, Callback = function(state) AimEnabled = state end})
+AimTab:Toggle({Title = "Enable AIM", Desc = "Aim vào đầu đối thủ", Default = AimEnabled, Callback = function(state) 
+    AimEnabled = state 
+    updateAimFOVCircle()
+end})
 AimTab:Toggle({Title = "Team Check AIM", Desc = "Chỉ aim người khác team", Default = AimTeamCheck, Callback = function(state) AimTeamCheck = state end})
 AimTab:Toggle({Title = "Wall Check", Desc = "Không aim nếu đối thủ bị che khuất", Default = AimWallCheck, Callback = function(state) AimWallCheck = state end})
 AimTab:Slider({Title = "Aim Distance", Min = 50, Max = 500, Default = AimDistance, Callback = function(value) AimDistance = value end})
 AimTab:Slider({Title = "Smooth Strength", Min = 0.05, Max = 1, Default = SmoothStrength, Step = 0.01, Callback = function(value) SmoothStrength = value end})
 
--- NEW: Custom Aimbot Key Button
+-- NEW: Aimbot FOV Settings
+AimTab:Slider({Title = "Aim FOV", Min = 50, Max = 300, Default = AimFOV, Callback = function(value) 
+    AimFOV = value 
+    if AimFOVCircle then
+        AimFOVCircle.Radius = value
+    end
+end})
+AimTab:Toggle({Title = "Show FOV Circle", Desc = "Hiển thị vòng FOV trên màn hình", Default = ShowAimFOV, Callback = function(state) 
+    ShowAimFOV = state 
+    updateAimFOVCircle()
+end})
+
+-- Custom Aimbot Key Button
 AimTab:Button({Title = "Aimbot Key: " .. getAimKeyName(), Desc = "Nhấn để đổi phím aimbot (chuột/ bàn phím)", Callback = function()
     startAimKeyBinding()
-    -- Update button text to show we're waiting for input
-    -- Note: You might need to refresh the UI or use a different approach in WindUI
 end})
 
 -- Movement Tab
@@ -937,81 +983,102 @@ MoveTab:Toggle({Title = "Anti Fling", Desc = "Chống văng nhân vật bởi l�
     toggleAntiFling()
 end})
 
--- NEW: Teleport Tab
+-- NEW: Teleport Tab với nút dịch chuyển trực tiếp
 local TeleportTab = Window:Tab({Title = "Teleport", Icon = "navigation"})
 TeleportTab:Toggle({Title = "Enable Teleport", Desc = "Kích hoạt hệ thống dịch chuyển", Default = TeleportEnabled, Callback = function(state) 
     TeleportEnabled = state 
-    if state then
-        initTeleportSystem()
-    end
 end})
-TeleportTab:Toggle({Title = "Save Positions", Desc = "Cho phép lưu vị trí", Default = SavePositions, Callback = function(state) SavePositions = state end})
-TeleportTab:Toggle({Title = "Quick Teleport Keys", Desc = "F1-F4 để teleport nhanh", Default = QuickTeleportKeys, Callback = function(state) 
-    QuickTeleportKeys = state 
-    if state then
-        initTeleportSystem()
-    end
-end})
-TeleportTab:Toggle({Title = "Spawn Teleport", Desc = "Dịch chuyển đến spawn", Default = SpawnTeleport, Callback = function(state) SpawnTeleport = state end})
-TeleportTab:Toggle({Title = "Objective Teleport", Desc = "Dịch chuyển đến mục tiêu", Default = ObjectiveTeleport, Callback = function(state) ObjectiveTeleport = state end})
-TeleportTab:Toggle({Title = "Safe Spot Teleport", Desc = "Dịch chuyển đến vị trí an toàn", Default = SafeSpotTeleport, Callback = function(state) SafeSpotTeleport = state end})
 
-TeleportTab:Button({Title = "Save Position 1 (F1)", Desc = "Lưu vị trí hiện tại vào F1", Callback = function()
+TeleportTab:Section({Title = "Lưu Vị Trí"})
+TeleportTab:Toggle({Title = "Cho phép lưu vị trí", Desc = "Bật tính năng lưu vị trí", Default = SavePositions, Callback = function(state) SavePositions = state end})
+
+TeleportTab:Button({Title = "💾 Lưu Vị Trí 1", Desc = "Lưu vị trí hiện tại vào slot 1", Callback = function()
     if SavePositions then
         saveCurrentPosition("Position1")
     else
-        print("[.binh Hub] Enable 'Save Positions' first!")
+        print("[.binh Hub] Enable 'Cho phép lưu vị trí' first!")
     end
 end})
 
-TeleportTab:Button({Title = "Save Position 2 (F2)", Desc = "Lưu vị trí hiện tại vào F2", Callback = function()
+TeleportTab:Button({Title = "💾 Lưu Vị Trí 2", Desc = "Lưu vị trí hiện tại vào slot 2", Callback = function()
     if SavePositions then
         saveCurrentPosition("Position2")
     else
-        print("[.binh Hub] Enable 'Save Positions' first!")
+        print("[.binh Hub] Enable 'Cho phép lưu vị trí' first!")
     end
 end})
 
-TeleportTab:Button({Title = "Save Position 3 (F3)", Desc = "Lưu vị trí hiện tại vào F3", Callback = function()
+TeleportTab:Button({Title = "💾 Lưu Vị Trí 3", Desc = "Lưu vị trí hiện tại vào slot 3", Callback = function()
     if SavePositions then
         saveCurrentPosition("Position3")
     else
-        print("[.binh Hub] Enable 'Save Positions' first!")
+        print("[.binh Hub] Enable 'Cho phép lưu vị trí' first!")
     end
 end})
 
-TeleportTab:Button({Title = "Save Position 4 (F4)", Desc = "Lưu vị trí hiện tại vào F4", Callback = function()
+TeleportTab:Button({Title = "💾 Lưu Vị Trí 4", Desc = "Lưu vị trí hiện tại vào slot 4", Callback = function()
     if SavePositions then
         saveCurrentPosition("Position4")
     else
-        print("[.binh Hub] Enable 'Save Positions' first!")
+        print("[.binh Hub] Enable 'Cho phép lưu vị trí' first!")
     end
 end})
 
-TeleportTab:Button({Title = "Teleport to Spawn", Desc = "Dịch chuyển đến spawn point", Callback = function()
-    if SpawnTeleport then
+TeleportTab:Section({Title = "Dịch Chuyển Đến Vị Trí Đã Lưu"})
+TeleportTab:Button({Title = "🚀 Dịch đến Vị Trí 1", Desc = "Dịch chuyển ngay đến vị trí đã lưu 1", Callback = function()
+    if TeleportEnabled and SavedPositions["Position1"] then
+        teleportToPosition(SavedPositions["Position1"])
+    else
+        print("[.binh Hub] Enable Teleport and save Position1 first!")
+    end
+end})
+
+TeleportTab:Button({Title = "🚀 Dịch đến Vị Trí 2", Desc = "Dịch chuyển ngay đến vị trí đã lưu 2", Callback = function()
+    if TeleportEnabled and SavedPositions["Position2"] then
+        teleportToPosition(SavedPositions["Position2"])
+    else
+        print("[.binh Hub] Enable Teleport and save Position2 first!")
+    end
+end})
+
+TeleportTab:Button({Title = "🚀 Dịch đến Vị Trí 3", Desc = "Dịch chuyển ngay đến vị trí đã lưu 3", Callback = function()
+    if TeleportEnabled and SavedPositions["Position3"] then
+        teleportToPosition(SavedPositions["Position3"])
+    else
+        print("[.binh Hub] Enable Teleport and save Position3 first!")
+    end
+end})
+
+TeleportTab:Button({Title = "🚀 Dịch đến Vị Trí 4", Desc = "Dịch chuyển ngay đến vị trí đã lưu 4", Callback = function()
+    if TeleportEnabled and SavedPositions["Position4"] then
+        teleportToPosition(SavedPositions["Position4"])
+    else
+        print("[.binh Hub] Enable Teleport and save Position4 first!")
+    end
+end})
+
+TeleportTab:Section({Title = "Dịch Chuyển Đặc Biệt"})
+TeleportTab:Button({Title = "🏠 Dịch đến Spawn", Desc = "Dịch chuyển ngay đến spawn point", Callback = function()
+    if TeleportEnabled then
         teleportToSpawn()
     else
-        print("[.binh Hub] Enable 'Spawn Teleport' first!")
+        print("[.binh Hub] Enable Teleport first!")
     end
 end})
 
-TeleportTab:Button({Title = "Teleport to Objective", Desc = "Dịch chuyển đến mục tiêu", Callback = function()
-    if ObjectiveTeleport then
+TeleportTab:Button({Title = "🎯 Dịch đến Mục Tiêu", Desc = "Dịch chuyển ngay đến mục tiêu trò chơi", Callback = function()
+    if TeleportEnabled then
         teleportToObjective()
     else
-        print("[.binh Hub] Enable 'Objective Teleport' first!")
+        print("[.binh Hub] Enable Teleport first!")
     end
 end})
 
-TeleportTab:Button({Title = "Teleport to Safe Spot", Desc = "Dịch chuyển đến vị trí an toàn", Callback = function()
-    if SafeSpotTeleport then
-        local safeSpot = findSafeSpot()
-        if safeSpot then
-            teleportToPosition(safeSpot)
-        end
+TeleportTab:Button({Title = "🛡️ Dịch đến Vị Trí An Toàn", Desc = "Dịch chuyển ngay đến vị trí an toàn gần nhất", Callback = function()
+    if TeleportEnabled then
+        teleportToSafeSpot()
     else
-        print("[.binh Hub] Enable 'Safe Spot Teleport' first!")
+        print("[.binh Hub] Enable Teleport first!")
     end
 end})
 
@@ -1053,15 +1120,10 @@ player.CharacterAdded:Connect(function(character)
     if NoclipEnabled then toggleNoclip() end
     if AntiFlingEnabled then toggleAntiFling() end
     if PerformanceEnabled then togglePerformance() end
-    if TeleportEnabled then initTeleportSystem() end
 end)
 
 -- Apply default theme on startup
 applyTheme(CurrentTheme)
+updateAimFOVCircle()
 
--- Initialize systems
-if TeleportEnabled then
-    initTeleportSystem()
-end
-
-print("[.binh Hub] Loaded successfully with Teleport System & Custom Aimbot Key!")
+print("[.binh Hub] Loaded successfully with FOV Settings & Improved Teleport System!")
