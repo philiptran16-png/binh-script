@@ -19,23 +19,23 @@ local Workspace = game:GetService("Workspace")
 local Camera = Workspace.CurrentCamera
 local player = Players.LocalPlayer
 
-local ESPEnabled = true
-local ESPTeamCheck = true
-local ESPWallCheck = true
+local ESPEnabled = false
+local ESPTeamCheck = false
+local ESPWallCheck = false
 local ESPDistance = 200
 
-local AimEnabled = true
-local AimTeamCheck = true
-local AimWallCheck = true
+local AimEnabled = false
+local AimTeamCheck = false
+local AimWallCheck = false
 local AimDistance = 200
 local SmoothStrength = 0.25
 
 local FlyEnabled = false
 local NoclipEnabled = false
 
-local RadarEnabled = true
+local RadarEnabled = false
 
-local AntiFlingEnabled = true
+local AntiFlingEnabled = false
 
 -- Config table
 local config = {
