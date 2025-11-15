@@ -1,9 +1,4 @@
---====================================================--
---                     .binh Hub                     --
---                FULL SCRIPT (Parts 1-7)            --
---   ESP | AIMBOT | MOVEMENT | TELEPORT | RADAR      --
--- PERFORMANCE | THEME | CONFIG | WINDUI INTEGRATION --
---====================================================--
+
 
 -- ======================== --
 --        SERVICES          --
