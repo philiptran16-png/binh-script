@@ -9,76 +9,162 @@ local Camera = Workspace.CurrentCamera
 
 -- ===== GUI =====
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "AdminPanel"
+screenGui.Name = "AdminPanelPro"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 -- Main Frame
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 320, 0, 420)
-frame.Position = UDim2.new(0, 20, 0, 20)
-frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+frame.Size = UDim2.new(0, 360, 0, 500)
+frame.Position = UDim2.new(0, 30, 0, 30)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 frame.BorderSizePixel = 0
 frame.AnchorPoint = Vector2.new(0,0)
 frame.Parent = screenGui
 frame.Active = true
-frame.Draggable = true  -- kéo GUI
+frame.Draggable = true
 
--- UI Gradient
+-- Shadow effect
+local uistroke = Instance.new("UIStroke")
+uistroke.Color = Color3.fromRGB(100,100,100)
+uistroke.Thickness = 2
+uistroke.Parent = frame
+
+-- Gradient background
 local gradient = Instance.new("UIGradient")
-gradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(70,70,70)),
-                                    ColorSequenceKeypoint.new(1, Color3.fromRGB(35,35,35))})
+gradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(45,45,45)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(20,20,20))
+})
 gradient.Rotation = 45
 gradient.Parent = frame
 
 -- Title
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1,0,0,40)
+title.Size = UDim2.new(1,0,0,50)
 title.Position = UDim2.new(0,0,0,0)
 title.BackgroundTransparency = 1
-title.Text = "Admin Panel"
+title.Text = "Admin Panel Pro"
 title.Font = Enum.Font.GothamBold
-title.TextSize = 22
+title.TextSize = 24
 title.TextColor3 = Color3.fromRGB(255,255,255)
 title.Parent = frame
 
--- Section function
-local function createButton(text, y)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -20, 0, 40)
-    btn.Position = UDim2.new(0, 10, 0, y)
-    btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    btn.BorderSizePixel = 0
-    btn.TextColor3 = Color3.fromRGB(255,255,255)
-    btn.Text = text
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 18
-    btn.Parent = frame
+-- ===== Helper Functions =====
+local function createToggle(text, y, default)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1,-20,0,40)
+    container.Position = UDim2.new(0,10,0,y)
+    container.BackgroundTransparency = 1
+    container.Parent = frame
 
-    -- Hover effect
-    btn.MouseEnter:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(90,90,90)}):Play()
-    end)
-    btn.MouseLeave:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(60,60,60)}):Play()
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.7,0,1,0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 18
+    label.TextColor3 = Color3.fromRGB(255,255,255)
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = container
+
+    local toggle = Instance.new("Frame")
+    toggle.Size = UDim2.new(0,50,0,25)
+    toggle.Position = UDim2.new(0.75,0,0.5,-12)
+    toggle.BackgroundColor3 = default and Color3.fromRGB(0,200,0) or Color3.fromRGB(120,120,120)
+    toggle.BorderSizePixel = 0
+    toggle.AnchorPoint = Vector2.new(0,0)
+    toggle.Parent = container
+
+    local circle = Instance.new("Frame")
+    circle.Size = UDim2.new(0,20,0,20)
+    circle.Position = default and UDim2.new(1,-20,0.5,-10) or UDim2.new(0,0,0.5,-10)
+    circle.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    circle.BorderSizePixel = 0
+    circle.AnchorPoint = Vector2.new(0,0)
+    circle.Parent = toggle
+    circle.Name = "Circle"
+
+    local toggleValue = default
+
+    toggle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            toggleValue = not toggleValue
+            local targetColor = toggleValue and Color3.fromRGB(0,200,0) or Color3.fromRGB(120,120,120)
+            local circlePos = toggleValue and UDim2.new(1,-20,0.5,-10) or UDim2.new(0,0,0.5,-10)
+            TweenService:Create(toggle,TweenInfo.new(0.2),{BackgroundColor3=targetColor}):Play()
+            TweenService:Create(circle,TweenInfo.new(0.2),{Position=circlePos}):Play()
+        end
     end)
 
-    return btn
+    return container, function() return toggleValue end
 end
 
--- ===== Buttons =====
-local y = 60
-local espButton = createButton("ESP: OFF", y); y = y + 50
-local teamCheckESPButton = createButton("TeamCheck ESP: ON", y); y = y + 50
-local aimButton = createButton("AIM: OFF", y); y = y + 50
-local teamCheckAimButton = createButton("TeamCheck AIM: ON", y); y = y + 50
-local wallCheckButton = createButton("WallCheck: ON", y); y = y + 50
-local flyButton = createButton("FLY: OFF", y); y = y + 50
-local noclipButton = createButton("Noclip: OFF", y)
+local function createSlider(text, y, min,max,default)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1,-20,0,40)
+    container.Position = UDim2.new(0,10,0,y)
+    container.BackgroundTransparency = 1
+    container.Parent = frame
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.5,0,1,0)
+    label.BackgroundTransparency = 1
+    label.Text = text.." ("..default..")"
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 16
+    label.TextColor3 = Color3.fromRGB(255,255,255)
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = container
+
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(0.45,0,0,8)
+    bar.Position = UDim2.new(0.5,0,0.5,-4)
+    bar.BackgroundColor3 = Color3.fromRGB(100,100,100)
+    bar.Parent = container
+
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((default-min)/(max-min),0,1,0)
+    fill.BackgroundColor3 = Color3.fromRGB(0,200,0)
+    fill.Parent = bar
+
+    local value = default
+    local dragging = false
+
+    bar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end
+    end)
+    bar.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local relative = math.clamp((input.Position.X - bar.AbsolutePosition.X)/bar.AbsoluteSize.X,0,1)
+            value = math.floor(min + relative*(max-min))
+            fill.Size = UDim2.new(relative,0,1,0)
+            label.Text = text.." ("..value..")"
+        end
+    end)
+
+    return container, function() return value end
+end
+
+-- ===== Create Toggles =====
+local y = 70
+local espToggle, getESP = createToggle("ESP",y,true); y = y + 50
+local teamCheckESPToggle, getTeamESP = createToggle("TeamCheck ESP",y,true); y = y + 50
+local aimToggle, getAim = createToggle("AIM",y,true); y = y + 50
+local teamCheckAimToggle, getTeamAim = createToggle("TeamCheck AIM",y,true); y = y + 50
+local wallCheckToggle, getWallCheck = createToggle("WallCheck",y,true); y = y + 50
+local flyToggle, getFly = createToggle("FLY",y,false); y = y + 50
+local noclipToggle, getNoclip = createToggle("Noclip",y,false); y = y + 50
+
+-- ===== Slider =====
+local aimDistanceSlider, getAimDistance = createSlider("Aim Distance",y,50,500,200); y = y + 60
 
 -- ===== Flags =====
-local espEnabled = false
-local aimEnabled = false
+local espEnabled = true
+local aimEnabled = true
 local flyEnabled = false
 local noclipEnabled = false
 local teamCheckESP = true
@@ -87,14 +173,27 @@ local wallCheck = true
 local aimStrength = 0.25
 local aimDistance = 200
 
+-- ===== Functions =====
+local function updateFlags()
+    espEnabled = getESP()
+    aimEnabled = getAim()
+    flyEnabled = getFly()
+    noclipEnabled = getNoclip()
+    teamCheckESP = getTeamESP()
+    teamCheckAim = getTeamAim()
+    wallCheck = getWallCheck()
+    aimDistance = getAimDistance()
+end
+
 -- ===== Wall Check =====
 local function isVisible(part)
+    if not part then return false end
     local origin = Camera.CFrame.Position
     local direction = part.Position - origin
     local rayParams = RaycastParams.new()
     rayParams.FilterDescendantsInstances = {player.Character}
     rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-    local ray = Workspace:Raycast(origin, direction, rayParams)
+    local ray = Workspace:Raycast(origin,direction,rayParams)
     if ray then
         return ray.Instance:IsDescendantOf(part.Parent)
     end
@@ -120,70 +219,27 @@ local function removeESP(character)
 end
 
 local function updateESP()
+    updateFlags()
     for _, plr in pairs(Players:GetPlayers()) do
         if plr.Character then
-            if espEnabled then
-                addESP(plr.Character, plr)
-            else
-                removeESP(plr.Character)
-            end
+            if espEnabled then addESP(plr.Character,plr)
+            else removeESP(plr.Character) end
         end
     end
 end
 
-espButton.MouseButton1Click:Connect(function()
-    espEnabled = not espEnabled
-    espButton.Text = "ESP: " .. (espEnabled and "ON" or "OFF")
-    updateESP()
-end)
-
-teamCheckESPButton.MouseButton1Click:Connect(function()
-    teamCheckESP = not teamCheckESP
-    teamCheckESPButton.Text = "TeamCheck ESP: " .. (teamCheckESP and "ON" or "OFF")
-    updateESP()
-end)
-
-Players.PlayerAdded:Connect(function(plr)
-    plr.CharacterAdded:Connect(function(char)
-        if espEnabled then addESP(char, plr) end
-    end)
-end)
-
-player.CharacterAdded:Connect(function(char)
-    if espEnabled then
-        for _, plr in pairs(Players:GetPlayers()) do
-            if plr.Character then addESP(plr.Character, plr) end
-        end
-    end
-    if noclipEnabled then
-        for _, part in pairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then part.CanCollide = false end
-        end
-    end
-    if flyEnabled then startFly() end
-end)
-
--- ===== Smooth Aim =====
-aimButton.MouseButton1Click:Connect(function()
-    aimEnabled = not aimEnabled
-    aimButton.Text = "AIM: " .. (aimEnabled and "ON" or "OFF")
-end)
-
-teamCheckAimButton.MouseButton1Click:Connect(function()
-    teamCheckAim = not teamCheckAim
-    teamCheckAimButton.Text = "TeamCheck AIM: " .. (teamCheckAim and "ON" or "OFF")
-end)
-
-wallCheckButton.MouseButton1Click:Connect(function()
-    wallCheck = not wallCheck
-    wallCheckButton.Text = "WallCheck: " .. (wallCheck and "ON" or "OFF")
-end)
-
+-- ===== RenderStepped Loop =====
 RunService.RenderStepped:Connect(function()
+    updateFlags()
+
+    -- ESP
+    if espEnabled then updateESP() end
+
+    -- Aim
     if aimEnabled then
         local nearestHead = nil
         local nearestDist = math.huge
-        for _, plr in pairs(Players:GetPlayers()) do
+        for _,plr in pairs(Players:GetPlayers()) do
             if plr ~= player and plr.Character and plr.Character:FindFirstChild("Head") then
                 if teamCheckAim and plr.Team == player.Team then continue end
                 local head = plr.Character.Head
@@ -197,39 +253,22 @@ RunService.RenderStepped:Connect(function()
             end
         end
         if nearestHead then
-            local currentCFrame = Camera.CFrame
-            local targetCFrame = CFrame.new(currentCFrame.Position, nearestHead.Position)
-            Camera.CFrame = currentCFrame:Lerp(targetCFrame, aimStrength)
+            local cf = Camera.CFrame
+            local targetCF = CFrame.new(cf.Position, nearestHead.Position)
+            Camera.CFrame = cf:Lerp(targetCF, aimStrength)
         end
     end
-end)
 
--- ===== Fly =====
-local flySpeed = 50
-local bodyVelocity = nil
-local function startFly()
-    local character = player.Character
-    if not character then return end
-    local root = character:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    bodyVelocity = Instance.new("BodyVelocity")
-    bodyVelocity.MaxForce = Vector3.new(1e5,1e5,1e5)
-    bodyVelocity.Velocity = Vector3.new(0,0,0)
-    bodyVelocity.Parent = root
-end
-local function stopFly()
-    if bodyVelocity then
-        bodyVelocity:Destroy()
-        bodyVelocity = nil
-    end
-end
-flyButton.MouseButton1Click:Connect(function()
-    flyEnabled = not flyEnabled
-    flyButton.Text = "FLY: " .. (flyEnabled and "ON" or "OFF")
-    if flyEnabled then startFly() else stopFly() end
-end)
-RunService.RenderStepped:Connect(function(dt)
-    if flyEnabled and bodyVelocity then
+    -- Fly
+    if flyEnabled and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        local root = player.Character.HumanoidRootPart
+        if not root:FindFirstChild("BV") then
+            local bv = Instance.new("BodyVelocity")
+            bv.Name = "BV"
+            bv.MaxForce = Vector3.new(1e5,1e5,1e5)
+            bv.Velocity = Vector3.new(0,0,0)
+            bv.Parent = root
+        end
         local dir = Vector3.new()
         if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + Camera.CFrame.LookVector end
         if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - Camera.CFrame.LookVector end
@@ -238,29 +277,18 @@ RunService.RenderStepped:Connect(function(dt)
         if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0,1,0) end
         if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir = dir - Vector3.new(0,1,0) end
         if dir.Magnitude > 0 then
-            bodyVelocity.Velocity = dir.Unit * flySpeed
+            root.BV.Velocity = dir.Unit * 50
         else
-            bodyVelocity.Velocity = Vector3.new(0,0,0)
+            root.BV.Velocity = Vector3.new(0,0,0)
         end
+    elseif player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character.HumanoidRootPart:FindFirstChild("BV") then
+        player.Character.HumanoidRootPart.BV:Destroy()
     end
-end)
 
--- ===== Noclip =====
-local function startNoclip(character)
-    for _, part in pairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then part.CanCollide = false end
-    end
-end
-local function stopNoclip(character)
-    for _, part in pairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then part.CanCollide = true end
-    end
-end
-noclipButton.MouseButton1Click:Connect(function()
-    noclipEnabled = not noclipEnabled
-    noclipButton.Text = "Noclip: " .. (noclipEnabled and "ON" or "OFF")
-    local character = player.Character
-    if character then
-        if noclipEnabled then startNoclip(character) else stopNoclip(character) end
+    -- Noclip
+    if noclipEnabled and player.Character then
+        for _, part in pairs(player.Character:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = false end
+        end
     end
 end)
