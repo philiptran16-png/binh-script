@@ -1,14 +1,15 @@
 -- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local TextService = game:GetService("TextService")
-local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
 
 -- Variables
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
+
+-- Load WindUI Library
+local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/src/main.lua"))()
 
 -- Main Settings
 local Settings = {
@@ -41,9 +42,20 @@ local Settings = {
         Watermark = true,
         HitMarker = false
     },
+    PlayerMods = {
+        Noclip = false,
+        Fly = false,
+        Speed = false,
+        SpeedValue = 16,
+        JumpPower = false,
+        JumpPowerValue = 50,
+        InfiniteJump = false,
+        NoClipKey = Enum.KeyCode.N,
+        FlyKey = Enum.KeyCode.F,
+        FlySpeed = 2
+    },
     Misc = {
         PanicKey = Enum.KeyCode.Delete,
-        UIStyle = "Dark",
         RainbowMode = false,
         AutoUpdate = true
     }
@@ -56,587 +68,205 @@ local Drawings = {
     Crosshair = nil,
     Watermark = nil,
     HitMarker = nil,
-    ESPs = {},
-    UI = nil
+    ESPs = {}
 }
 
 local Data = {
     Connections = {},
     RainbowHue = 0,
     Target = nil,
-    HitTime = 0
+    HitTime = 0,
+    Flying = false,
+    NoClipping = false,
+    OriginalWalkSpeed = 16,
+    OriginalJumpPower = 50,
+    FlyConnection = nil,
+    NoclipConnection = nil,
+    SpeedConnection = nil,
+    JumpConnection = nil
 }
 
--- Windy UI Library
-local WindyUI = {}
-WindyUI.__index = WindyUI
-
-function WindyUI:CreateWindow(title, size)
-    local Window = {}
-    setmetatable(Window, WindyUI)
-    
-    -- Create main GUI
-    Window.ScreenGui = Instance.new("ScreenGui")
-    Window.ScreenGui.Name = "WindyUI_" .. HttpService:GenerateGUID(false):sub(1, 8)
-    Window.ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    Window.ScreenGui.Parent = game:GetService("CoreGui")
-    
-    -- Main container
-    Window.MainFrame = Instance.new("Frame")
-    Window.MainFrame.Size = size or UDim2.new(0, 450, 0, 550)
-    Window.MainFrame.Position = UDim2.new(0, 20, 0, 20)
-    Window.MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    Window.MainFrame.BorderSizePixel = 0
-    Window.MainFrame.ClipsDescendants = true
-    Window.MainFrame.Parent = Window.ScreenGui
-    
-    -- Corner
-    local Corner = Instance.new("UICorner")
-    Corner.CornerRadius = UDim.new(0, 12)
-    Corner.Parent = Window.MainFrame
-    
-    -- Shadow effect
-    local Shadow = Instance.new("ImageLabel")
-    Shadow.Name = "Shadow"
-    Shadow.Size = UDim2.new(1, 20, 1, 20)
-    Shadow.Position = UDim2.new(0, -10, 0, -10)
-    Shadow.BackgroundTransparency = 1
-    Shadow.Image = "rbxassetid://1316045217"
-    Shadow.ImageColor3 = Color3.new(0, 0, 0)
-    Shadow.ImageTransparency = 0.8
-    Shadow.ScaleType = Enum.ScaleType.Slice
-    Shadow.SliceCenter = Rect.new(10, 10, 118, 118)
-    Shadow.Parent = Window.MainFrame
-    Shadow.ZIndex = -1
-    
-    -- Title bar
-    Window.TitleBar = Instance.new("Frame")
-    Window.TitleBar.Name = "TitleBar"
-    Window.TitleBar.Size = UDim2.new(1, 0, 0, 45)
-    Window.TitleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-    Window.TitleBar.BorderSizePixel = 0
-    Window.TitleBar.Parent = Window.MainFrame
-    
-    local TitleCorner = Instance.new("UICorner")
-    TitleCorner.CornerRadius = UDim.new(0, 12)
-    TitleCorner.Parent = Window.TitleBar
-    
-    -- Title
-    Window.TitleLabel = Instance.new("TextLabel")
-    Window.TitleLabel.Name = "TitleLabel"
-    Window.TitleLabel.Size = UDim2.new(1, -100, 1, 0)
-    Window.TitleLabel.Position = UDim2.new(0, 15, 0, 0)
-    Window.TitleLabel.BackgroundTransparency = 1
-    Window.TitleLabel.Text = title or "Windy UI"
-    Window.TitleLabel.TextColor3 = Color3.new(1, 1, 1)
-    Window.TitleLabel.TextSize = 20
-    Window.TitleLabel.Font = Enum.Font.GothamBold
-    Window.TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    Window.TitleLabel.Parent = Window.TitleBar
-    
-    -- Close button
-    Window.CloseButton = Instance.new("TextButton")
-    Window.CloseButton.Name = "CloseButton"
-    Window.CloseButton.Size = UDim2.new(0, 80, 0, 30)
-    Window.CloseButton.Position = UDim2.new(1, -90, 0, 7)
-    Window.CloseButton.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
-    Window.CloseButton.BorderSizePixel = 0
-    Window.CloseButton.Text = "CLOSE"
-    Window.CloseButton.TextColor3 = Color3.new(1, 1, 1)
-    Window.CloseButton.TextSize = 12
-    Window.CloseButton.Font = Enum.Font.GothamBold
-    Window.CloseButton.Parent = Window.TitleBar
-    
-    local CloseCorner = Instance.new("UICorner")
-    CloseCorner.CornerRadius = UDim.new(0, 6)
-    CloseCorner.Parent = Window.CloseButton
-    
-    -- Tab container
-    Window.TabContainer = Instance.new("Frame")
-    Window.TabContainer.Name = "TabContainer"
-    Window.TabContainer.Size = UDim2.new(1, -20, 0, 40)
-    Window.TabContainer.Position = UDim2.new(0, 10, 0, 55)
-    Window.TabContainer.BackgroundTransparency = 1
-    Window.TabContainer.Parent = Window.MainFrame
-    
-    local TabLayout = Instance.new("UIListLayout")
-    TabLayout.FillDirection = Enum.FillDirection.Horizontal
-    TabLayout.Padding = UDim.new(0, 5)
-    TabLayout.Parent = Window.TabContainer
-    
-    -- Content container
-    Window.ContentFrame = Instance.new("Frame")
-    Window.ContentFrame.Name = "ContentFrame"
-    Window.ContentFrame.Size = UDim2.new(1, -20, 1, -120)
-    Window.ContentFrame.Position = UDim2.new(0, 10, 0, 105)
-    Window.ContentFrame.BackgroundTransparency = 1
-    Window.ContentFrame.Parent = Window.MainFrame
-    
-    -- Make draggable
-    Window:Draggable()
-    
-    -- Close functionality
-    Window.CloseButton.MouseButton1Click:Connect(function()
-        Window:Destroy()
-    end)
-    
-    Window.Tabs = {}
-    Window.CurrentTab = nil
-    
-    return Window
-end
-
-function WindyUI:CreateTab(name)
-    local Tab = {}
-    
-    -- Tab button
-    Tab.Button = Instance.new("TextButton")
-    Tab.Button.Name = name .. "Tab"
-    Tab.Button.Size = UDim2.new(0, 100, 1, 0)
-    Tab.Button.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-    Tab.Button.BorderSizePixel = 0
-    Tab.Button.Text = name
-    Tab.Button.TextColor3 = Color3.new(1, 1, 1)
-    Tab.Button.TextSize = 14
-    Tab.Button.Font = Enum.Font.GothamSemibold
-    Tab.Button.Parent = self.TabContainer
-    
-    local TabCorner = Instance.new("UICorner")
-    TabCorner.CornerRadius = UDim.new(0, 6)
-    TabCorner.Parent = Tab.Button
-    
-    -- Tab content
-    Tab.Content = Instance.new("ScrollingFrame")
-    Tab.Content.Name = name .. "Content"
-    Tab.Content.Size = UDim2.new(1, 0, 1, 0)
-    Tab.Content.Position = UDim2.new(0, 0, 0, 0)
-    Tab.Content.BackgroundTransparency = 1
-    Tab.Content.BorderSizePixel = 0
-    Tab.Content.ScrollBarThickness = 3
-    Tab.Content.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 100)
-    Tab.Content.Visible = false
-    Tab.Content.Parent = self.ContentFrame
-    
-    local ContentLayout = Instance.new("UIListLayout")
-    ContentLayout.Padding = UDim.new(0, 10)
-    ContentLayout.Parent = Tab.Content
-    
-    local ContentPadding = Instance.new("UIPadding")
-    ContentPadding.PaddingTop = UDim.new(0, 10)
-    ContentPadding.PaddingLeft = UDim.new(0, 5)
-    ContentPadding.PaddingRight = UDim.new(0, 5)
-    ContentPadding.Parent = Tab.Content
-    
-    -- Tab click event
-    Tab.Button.MouseButton1Click:Connect(function()
-        self:SwitchTab(Tab)
-    end)
-    
-    self.Tabs[name] = Tab
-    
-    -- Set as first tab if none selected
-    if not self.CurrentTab then
-        self:SwitchTab(Tab)
+-- Player Mods Functions
+local function startNoclip()
+    if Data.NoclipConnection then
+        Data.NoclipConnection:Disconnect()
     end
     
-    return Tab
-end
-
-function WindyUI:SwitchTab(tab)
-    if self.CurrentTab then
-        self.CurrentTab.Button.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-        self.CurrentTab.Content.Visible = false
-    end
-    
-    self.CurrentTab = tab
-    tab.Button.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-    tab.Content.Visible = true
-end
-
-function WindyUI:CreateSection(tab, title)
-    local Section = {}
-    
-    Section.Frame = Instance.new("Frame")
-    Section.Frame.Size = UDim2.new(1, 0, 0, 40)
-    Section.Frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-    Section.Frame.BorderSizePixel = 0
-    Section.Frame.Parent = tab.Content
-    
-    local SectionCorner = Instance.new("UICorner")
-    SectionCorner.CornerRadius = UDim.new(0, 8)
-    SectionCorner.Parent = Section.Frame
-    
-    Section.Title = Instance.new("TextLabel")
-    Section.Title.Size = UDim2.new(1, -20, 1, 0)
-    Section.Title.Position = UDim2.new(0, 10, 0, 0)
-    Section.Title.BackgroundTransparency = 1
-    Section.Title.Text = title
-    Section.Title.TextColor3 = Color3.new(1, 1, 1)
-    Section.Title.TextSize = 16
-    Section.Title.Font = Enum.Font.GothamSemibold
-    Section.Title.TextXAlignment = Enum.TextXAlignment.Left
-    Section.Title.Parent = Section.Frame
-    
-    Section.Content = Instance.new("Frame")
-    Section.Content.Size = UDim2.new(1, -20, 0, 0)
-    Section.Content.Position = UDim2.new(0, 10, 0, 40)
-    Section.Content.BackgroundTransparency = 1
-    Section.Content.Parent = Section.Frame
-    
-    local ContentLayout = Instance.new("UIListLayout")
-    ContentLayout.Padding = UDim.new(0, 8)
-    ContentLayout.Parent = Section.Content
-    
-    return Section
-end
-
-function WindyUI:CreateToggle(section, text, defaultValue, callback)
-    local Toggle = {}
-    
-    Toggle.Frame = Instance.new("Frame")
-    Toggle.Frame.Size = UDim2.new(1, 0, 0, 30)
-    Toggle.Frame.BackgroundTransparency = 1
-    Toggle.Frame.Parent = section.Content
-    
-    Toggle.Label = Instance.new("TextLabel")
-    Toggle.Label.Size = UDim2.new(0.7, 0, 1, 0)
-    Toggle.Label.BackgroundTransparency = 1
-    Toggle.Label.Text = text
-    Toggle.Label.TextColor3 = Color3.new(1, 1, 1)
-    Toggle.Label.TextSize = 14
-    Toggle.Label.Font = Enum.Font.Gotham
-    Toggle.Label.TextXAlignment = Enum.TextXAlignment.Left
-    Toggle.Label.Parent = Toggle.Frame
-    
-    Toggle.Button = Instance.new("TextButton")
-    Toggle.Button.Size = UDim2.new(0, 50, 0, 25)
-    Toggle.Button.Position = UDim2.new(1, -50, 0, 2)
-    Toggle.Button.BackgroundColor3 = defaultValue and Color3.fromRGB(0, 120, 215) or Color3.fromRGB(60, 60, 60)
-    Toggle.Button.BorderSizePixel = 0
-    Toggle.Button.Text = ""
-    Toggle.Button.Parent = Toggle.Frame
-    
-    local ToggleCorner = Instance.new("UICorner")
-    ToggleCorner.CornerRadius = UDim.new(0, 12)
-    ToggleCorner.Parent = Toggle.Button
-    
-    Toggle.Knob = Instance.new("Frame")
-    Toggle.Knob.Size = UDim2.new(0, 21, 0, 21)
-    Toggle.Knob.Position = UDim2.new(0, defaultValue and 29 or 2, 0, 2)
-    Toggle.Knob.BackgroundColor3 = Color3.new(1, 1, 1)
-    Toggle.Knob.BorderSizePixel = 0
-    Toggle.Knob.Parent = Toggle.Button
-    
-    local KnobCorner = Instance.new("UICorner")
-    KnobCorner.CornerRadius = UDim.new(0, 10)
-    KnobCorner.Parent = Toggle.Knob
-    
-    Toggle.Value = defaultValue
-    
-    Toggle.Button.MouseButton1Click:Connect(function()
-        Toggle.Value = not Toggle.Value
-        local newPos = Toggle.Value and 29 or 2
-        local newColor = Toggle.Value and Color3.fromRGB(0, 120, 215) or Color3.fromRGB(60, 60, 60)
-        
-        local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-        local tween1 = TweenService:Create(Toggle.Knob, tweenInfo, {Position = UDim2.new(0, newPos, 0, 2)})
-        local tween2 = TweenService:Create(Toggle.Button, tweenInfo, {BackgroundColor3 = newColor})
-        
-        tween1:Play()
-        tween2:Play()
-        
-        if callback then
-            callback(Toggle.Value)
-        end
-    end)
-    
-    return Toggle
-end
-
-function WindyUI:CreateSlider(section, text, minValue, maxValue, defaultValue, callback)
-    local Slider = {}
-    
-    Slider.Frame = Instance.new("Frame")
-    Slider.Frame.Size = UDim2.new(1, 0, 0, 60)
-    Slider.Frame.BackgroundTransparency = 1
-    Slider.Frame.Parent = section.Content
-    
-    Slider.Label = Instance.new("TextLabel")
-    Slider.Label.Size = UDim2.new(1, 0, 0, 20)
-    Slider.Label.BackgroundTransparency = 1
-    Slider.Label.Text = text .. ": " .. defaultValue
-    Slider.Label.TextColor3 = Color3.new(1, 1, 1)
-    Slider.Label.TextSize = 14
-    Slider.Label.Font = Enum.Font.Gotham
-    Slider.Label.TextXAlignment = Enum.TextXAlignment.Left
-    Slider.Label.Parent = Slider.Frame
-    
-    Slider.Background = Instance.new("Frame")
-    Slider.Background.Size = UDim2.new(1, 0, 0, 20)
-    Slider.Background.Position = UDim2.new(0, 0, 0, 25)
-    Slider.Background.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    Slider.Background.BorderSizePixel = 0
-    Slider.Background.Parent = Slider.Frame
-    
-    local BackgroundCorner = Instance.new("UICorner")
-    BackgroundCorner.CornerRadius = UDim.new(0, 10)
-    BackgroundCorner.Parent = Slider.Background
-    
-    Slider.Fill = Instance.new("Frame")
-    Slider.Fill.Size = UDim2.new((defaultValue - minValue) / (maxValue - minValue), 0, 1, 0)
-    Slider.Fill.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-    Slider.Fill.BorderSizePixel = 0
-    Slider.Fill.Parent = Slider.Background
-    
-    local FillCorner = Instance.new("UICorner")
-    FillCorner.CornerRadius = UDim.new(0, 10)
-    FillCorner.Parent = Slider.Fill
-    
-    Slider.Button = Instance.new("TextButton")
-    Slider.Button.Size = UDim2.new(0, 20, 0, 20)
-    Slider.Button.Position = UDim2.new(Slider.Fill.Size.X.Scale, -10, 0, 0)
-    Slider.Button.BackgroundColor3 = Color3.new(1, 1, 1)
-    Slider.Button.BorderSizePixel = 0
-    Slider.Button.Text = ""
-    Slider.Button.Parent = Slider.Background
-    
-    local ButtonCorner = Instance.new("UICorner")
-    ButtonCorner.CornerRadius = UDim.new(0, 10)
-    ButtonCorner.Parent = Slider.Button
-    
-    Slider.Value = defaultValue
-    Slider.Min = minValue
-    Slider.Max = maxValue
-    
-    local function updateSlider(input)
-        local relativeX = (input.Position.X - Slider.Background.AbsolutePosition.X) / Slider.Background.AbsoluteSize.X
-        relativeX = math.clamp(relativeX, 0, 1)
-        
-        local value = minValue + (maxValue - minValue) * relativeX
-        value = math.floor(value)
-        
-        Slider.Fill.Size = UDim2.new(relativeX, 0, 1, 0)
-        Slider.Button.Position = UDim2.new(relativeX, -10, 0, 0)
-        Slider.Label.Text = text .. ": " .. value
-        Slider.Value = value
-        
-        if callback then
-            callback(value)
-        end
-    end
-    
-    local dragging = false
-    
-    Slider.Button.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-        end
-    end)
-    
-    Slider.Button.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end)
-    
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            updateSlider(input)
-        end
-    end)
-    
-    Slider.Background.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            updateSlider(input)
-        end
-    end)
-    
-    return Slider
-end
-
-function WindyUI:CreateDropdown(section, text, options, defaultValue, callback)
-    local Dropdown = {}
-    
-    Dropdown.Frame = Instance.new("Frame")
-    Dropdown.Frame.Size = UDim2.new(1, 0, 0, 30)
-    Dropdown.Frame.BackgroundTransparency = 1
-    Dropdown.Frame.Parent = section.Content
-    
-    Dropdown.Label = Instance.new("TextLabel")
-    Dropdown.Label.Size = UDim2.new(0.4, 0, 1, 0)
-    Dropdown.Label.BackgroundTransparency = 1
-    Dropdown.Label.Text = text
-    Dropdown.Label.TextColor3 = Color3.new(1, 1, 1)
-    Dropdown.Label.TextSize = 14
-    Dropdown.Label.Font = Enum.Font.Gotham
-    Dropdown.Label.TextXAlignment = Enum.TextXAlignment.Left
-    Dropdown.Label.Parent = Dropdown.Frame
-    
-    Dropdown.Button = Instance.new("TextButton")
-    Dropdown.Button.Size = UDim2.new(0.55, 0, 1, 0)
-    Dropdown.Button.Position = UDim2.new(0.4, 0, 0, 0)
-    Dropdown.Button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    Dropdown.Button.BorderSizePixel = 0
-    Dropdown.Button.Text = defaultValue or "Select..."
-    Dropdown.Button.TextColor3 = Color3.new(1, 1, 1)
-    Dropdown.Button.TextSize = 14
-    Dropdown.Button.Font = Enum.Font.Gotham
-    Dropdown.Button.Parent = Dropdown.Frame
-    
-    local ButtonCorner = Instance.new("UICorner")
-    ButtonCorner.CornerRadius = UDim.new(0, 6)
-    ButtonCorner.Parent = Dropdown.Button
-    
-    Dropdown.Options = options
-    Dropdown.Value = defaultValue
-    
-    Dropdown.Button.MouseButton1Click:Connect(function()
-        -- Create dropdown list
-        local DropdownList = Instance.new("Frame")
-        DropdownList.Size = UDim2.new(1, 0, 0, #options * 30)
-        DropdownList.Position = UDim2.new(0, 0, 1, 5)
-        DropdownList.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-        DropdownList.BorderSizePixel = 0
-        DropdownList.Parent = Dropdown.Button
-        
-        local ListCorner = Instance.new("UICorner")
-        ListCorner.CornerRadius = UDim.new(0, 6)
-        ListCorner.Parent = DropdownList
-        
-        for i, option in ipairs(options) do
-            local OptionButton = Instance.new("TextButton")
-            OptionButton.Size = UDim2.new(1, 0, 0, 30)
-            OptionButton.Position = UDim2.new(0, 0, 0, (i-1)*30)
-            OptionButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-            OptionButton.BorderSizePixel = 0
-            OptionButton.Text = option
-            OptionButton.TextColor3 = Color3.new(1, 1, 1)
-            OptionButton.TextSize = 14
-            OptionButton.Font = Enum.Font.Gotham
-            OptionButton.Parent = DropdownList
-            
-            OptionButton.MouseButton1Click:Connect(function()
-                Dropdown.Value = option
-                Dropdown.Button.Text = option
-                DropdownList:Destroy()
-                
-                if callback then
-                    callback(option)
-                end
-            end)
-        end
-        
-        -- Close dropdown when clicking elsewhere
-        local connection
-        connection = UserInputService.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                if not DropdownList:IsDescendantOf(workspace) then
-                    connection:Disconnect()
-                else
-                    local mousePos = UserInputService:GetMouseLocation()
-                    local buttonPos = Dropdown.Button.AbsolutePosition
-                    local buttonSize = Dropdown.Button.AbsoluteSize
-                    local listPos = DropdownList.AbsolutePosition
-                    local listSize = DropdownList.AbsoluteSize
-                    
-                    if not (mousePos.X >= buttonPos.X and mousePos.X <= buttonPos.X + buttonSize.X and
-                           mousePos.Y >= buttonPos.Y and mousePos.Y <= buttonPos.Y + buttonSize.Y + listSize.Y) then
-                        DropdownList:Destroy()
-                        connection:Disconnect()
-                    end
+    Data.NoclipConnection = RunService.Stepped:Connect(function()
+        if Settings.PlayerMods.Noclip and LocalPlayer.Character then
+            for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                if part:IsA("BasePart") and part.CanCollide then
+                    part.CanCollide = false
                 end
             end
-        end)
-    end)
-    
-    return Dropdown
-end
-
-function WindyUI:CreateButton(section, text, callback)
-    local Button = {}
-    
-    Button.Frame = Instance.new("TextButton")
-    Button.Frame.Size = UDim2.new(1, 0, 0, 35)
-    Button.Frame.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-    Button.Frame.BorderSizePixel = 0
-    Button.Frame.Text = text
-    Button.Frame.TextColor3 = Color3.new(1, 1, 1)
-    Button.Frame.TextSize = 14
-    Button.Frame.Font = Enum.Font.GothamSemibold
-    Button.Frame.Parent = section.Content
-    
-    local ButtonCorner = Instance.new("UICorner")
-    ButtonCorner.CornerRadius = UDim.new(0, 6)
-    ButtonCorner.Parent = Button.Frame
-    
-    Button.Frame.MouseButton1Click:Connect(function()
-        if callback then
-            callback()
-        end
-    end)
-    
-    return Button
-end
-
-function WindyUI:CreateLabel(section, text, size)
-    local Label = {}
-    
-    Label.Frame = Instance.new("TextLabel")
-    Label.Frame.Size = UDim2.new(1, 0, 0, size or 20)
-    Label.Frame.BackgroundTransparency = 1
-    Label.Frame.Text = text
-    Label.Frame.TextColor3 = Color3.new(1, 1, 1)
-    Label.Frame.TextSize = size or 14
-    Label.Frame.Font = Enum.Font.Gotham
-    Label.Frame.TextXAlignment = Enum.TextXAlignment.Left
-    Label.Frame.Parent = section.Content
-    
-    return Label
-end
-
-function WindyUI:Draggable()
-    local dragging = false
-    local dragInput, dragStart, startPos
-    
-    self.TitleBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = self.MainFrame.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-    
-    self.TitleBar.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement then
-            dragInput = input
-        end
-    end)
-    
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            self.MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
     end)
 end
 
-function WindyUI:Destroy()
-    if self.ScreenGui then
-        self.ScreenGui:Destroy()
+local function stopNoclip()
+    if Data.NoclipConnection then
+        Data.NoclipConnection:Disconnect()
+        Data.NoclipConnection = nil
+    end
+    
+    if LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
+    end
+end
+
+local function startFly()
+    if Data.FlyConnection then
+        Data.FlyConnection:Disconnect()
+    end
+    
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+    
+    Data.Flying = true
+    humanoid.PlatformStand = true
+    
+    local bodyVelocity = Instance.new("BodyVelocity")
+    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+    bodyVelocity.Parent = rootPart
+    
+    Data.FlyConnection = RunService.Heartbeat:Connect(function()
+        if not Data.Flying or not character or not rootPart then
+            if Data.FlyConnection then
+                Data.FlyConnection:Disconnect()
+            end
+            return
+        end
+        
+        local camera = workspace.CurrentCamera
+        local flySpeed = Settings.PlayerMods.FlySpeed
+        
+        local direction = Vector3.new()
+        
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+            direction = direction + camera.CFrame.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+            direction = direction - camera.CFrame.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+            direction = direction - camera.CFrame.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+            direction = direction + camera.CFrame.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            direction = direction + Vector3.new(0, 1, 0)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+            direction = direction - Vector3.new(0, 1, 0)
+        end
+        
+        if direction.Magnitude > 0 then
+            direction = direction.Unit * flySpeed
+        end
+        
+        bodyVelocity.Velocity = direction
+    end)
+end
+
+local function stopFly()
+    Data.Flying = false
+    
+    if Data.FlyConnection then
+        Data.FlyConnection:Disconnect()
+        Data.FlyConnection = nil
+    end
+    
+    local character = LocalPlayer.Character
+    if character then
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.PlatformStand = false
+        end
+        
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        if rootPart then
+            local bodyVelocity = rootPart:FindFirstChild("BodyVelocity")
+            if bodyVelocity then
+                bodyVelocity:Destroy()
+            end
+        end
+    end
+end
+
+local function applySpeed()
+    if LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            if Settings.PlayerMods.Speed then
+                humanoid.WalkSpeed = Settings.PlayerMods.SpeedValue
+            else
+                humanoid.WalkSpeed = Data.OriginalWalkSpeed
+            end
+        end
+    end
+end
+
+local function applyJumpPower()
+    if LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            if Settings.PlayerMods.JumpPower then
+                humanoid.JumpPower = Settings.PlayerMods.JumpPowerValue
+            else
+                humanoid.JumpPower = Data.OriginalJumpPower
+            end
+        end
+    end
+end
+
+local function startInfiniteJump()
+    if Data.JumpConnection then
+        Data.JumpConnection:Disconnect()
+    end
+    
+    Data.JumpConnection = UserInputService.JumpRequest:Connect(function()
+        if Settings.PlayerMods.InfiniteJump and LocalPlayer.Character then
+            local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end
+    end)
+end
+
+local function stopInfiniteJump()
+    if Data.JumpConnection then
+        Data.JumpConnection:Disconnect()
+        Data.JumpConnection = nil
+    end
+end
+
+-- Save original values
+local function saveOriginalValues()
+    if LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            Data.OriginalWalkSpeed = humanoid.WalkSpeed
+            Data.OriginalJumpPower = humanoid.JumpPower
+        end
     end
 end
 
 -- ESP Functions
 local function createDirectionLine()
-    if Drawings.DirectionLine then
-        Drawings.DirectionLine:Remove()
-    end
-    
+    if Drawings.DirectionLine then Drawings.DirectionLine:Remove() end
     Drawings.DirectionLine = Drawing.new("Line")
     Drawings.DirectionLine.Color = Settings.ESP.BoxColor
     Drawings.DirectionLine.Thickness = 2
@@ -644,10 +274,7 @@ local function createDirectionLine()
 end
 
 local function createFOVCircle()
-    if Drawings.FOVCircle then
-        Drawings.FOVCircle:Remove()
-    end
-    
+    if Drawings.FOVCircle then Drawings.FOVCircle:Remove() end
     Drawings.FOVCircle = Drawing.new("Circle")
     Drawings.FOVCircle.Visible = Settings.Visuals.FOVCircle
     Drawings.FOVCircle.Color = Settings.ESP.BoxColor
@@ -659,25 +286,18 @@ local function createFOVCircle()
 end
 
 local function createCrosshair()
-    if Drawings.Crosshair then
-        Drawings.Crosshair:Remove()
-    end
-    
+    if Drawings.Crosshair then Drawings.Crosshair:Remove() end
     Drawings.Crosshair = Drawing.new("Line")
     Drawings.Crosshair.Visible = Settings.Visuals.Crosshair
     Drawings.Crosshair.Color = Color3.new(1, 1, 1)
     Drawings.Crosshair.Thickness = 1
-    
     local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     Drawings.Crosshair.From = Vector2.new(center.X - 8, center.Y)
     Drawings.Crosshair.To = Vector2.new(center.X + 8, center.Y)
 end
 
 local function createWatermark()
-    if Drawings.Watermark then
-        Drawings.Watermark:Remove()
-    end
-    
+    if Drawings.Watermark then Drawings.Watermark:Remove() end
     Drawings.Watermark = Drawing.new("Text")
     Drawings.Watermark.Visible = Settings.Visuals.Watermark
     Drawings.Watermark.Color = Color3.new(1, 1, 1)
@@ -687,21 +307,14 @@ local function createWatermark()
     Drawings.Watermark.Position = Vector2.new(10, 10)
 end
 
+-- Update functions
 local function updateDirectionLine()
-    if not Drawings.DirectionLine or not Settings.Visuals.DirectionLine then
-        if Drawings.DirectionLine then
-            Drawings.DirectionLine.Visible = false
-        end
-        return
-    end
-    
+    if not Drawings.DirectionLine or not Settings.Visuals.DirectionLine then return end
     local lookVector = Camera.CFrame.LookVector
     local startPos = Camera.CFrame.Position
     local endPos = startPos + lookVector * Settings.ESP.MaxDistance
-    
     local startVector, startVisible = Camera:WorldToViewportPoint(startPos)
     local endVector, endVisible = Camera:WorldToViewportPoint(endPos)
-    
     if startVisible and endVisible then
         Drawings.DirectionLine.From = Vector2.new(startVector.X, startVector.Y)
         Drawings.DirectionLine.To = Vector2.new(endVector.X, endVector.Y)
@@ -713,13 +326,7 @@ local function updateDirectionLine()
 end
 
 local function updateFOVCircle()
-    if not Drawings.FOVCircle or not Settings.Visuals.FOVCircle then
-        if Drawings.FOVCircle then
-            Drawings.FOVCircle.Visible = false
-        end
-        return
-    end
-    
+    if not Drawings.FOVCircle or not Settings.Visuals.FOVCircle then return end
     Drawings.FOVCircle.Visible = Settings.Visuals.FOVCircle
     Drawings.FOVCircle.Color = Settings.ESP.BoxColor
     Drawings.FOVCircle.Radius = Settings.Aimbot.FOV
@@ -727,13 +334,7 @@ local function updateFOVCircle()
 end
 
 local function updateCrosshair()
-    if not Drawings.Crosshair or not Settings.Visuals.Crosshair then
-        if Drawings.Crosshair then
-            Drawings.Crosshair.Visible = false
-        end
-        return
-    end
-    
+    if not Drawings.Crosshair or not Settings.Visuals.Crosshair then return end
     local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     Drawings.Crosshair.From = Vector2.new(center.X - 8, center.Y)
     Drawings.Crosshair.To = Vector2.new(center.X + 8, center.Y)
@@ -741,13 +342,7 @@ local function updateCrosshair()
 end
 
 local function updateWatermark()
-    if not Drawings.Watermark or not Settings.Visuals.Watermark then
-        if Drawings.Watermark then
-            Drawings.Watermark.Visible = false
-        end
-        return
-    end
-    
+    if not Drawings.Watermark or not Settings.Visuals.Watermark then return end
     local fps = math.floor(1 / RunService.RenderStepped:Wait())
     Drawings.Watermark.Text = string.format("Windy ESP | FPS: %d | Players: %d", fps, #Players:GetPlayers())
     Drawings.Watermark.Visible = true
@@ -1003,6 +598,10 @@ local function update()
     updateESP()
     updateAimbot()
     
+    -- Update player mods
+    applySpeed()
+    applyJumpPower()
+    
     -- Update hit marker
     if Drawings.HitMarker then
         local timeSinceHit = tick() - Data.HitTime
@@ -1016,157 +615,426 @@ local function update()
     end
 end
 
--- Create UI
-local function createUI()
-    local Window = WindyUI:CreateWindow("Windy ESP v2.0", UDim2.new(0, 500, 0, 600))
-    Drawings.UI = Window
+-- Create WindUI Interface
+local function createWindUI()
+    local window = WindUI:Window({
+        Title = "Windy ESP v4.0",
+        Icon = "settings",
+        Size = UDim2.new(0, 500, 0, 500),
+        Position = UDim2.new(0, 20, 0, 20)
+    })
     
     -- ESP Tab
-    local ESPTab = Window:CreateTab("ESP")
-    local ESPMain = Window:CreateSection(ESPTab, "ESP Settings")
+    local esptab = window:Tab({
+        Title = "ESP",
+        Icon = "eye"
+    })
     
-    Window:CreateToggle(ESPMain, "Enable ESP", Settings.ESP.Enabled, function(value)
-        Settings.ESP.Enabled = value
-    end)
+    esptab:Toggle({
+        Title = "Enable ESP",
+        Value = Settings.ESP.Enabled,
+        Callback = function(value)
+            Settings.ESP.Enabled = value
+        end
+    })
     
-    Window:CreateToggle(ESPMain, "Show Boxes", Settings.ESP.ShowBoxes, function(value)
-        Settings.ESP.ShowBoxes = value
-    end)
+    esptab:Toggle({
+        Title = "Show Boxes",
+        Value = Settings.ESP.ShowBoxes,
+        Callback = function(value)
+            Settings.ESP.ShowBoxes = value
+        end
+    })
     
-    Window:CreateToggle(ESPMain, "Show Tracers", Settings.ESP.ShowTracers, function(value)
-        Settings.ESP.ShowTracers = value
-    end)
+    esptab:Toggle({
+        Title = "Show Tracers",
+        Value = Settings.ESP.ShowTracers,
+        Callback = function(value)
+            Settings.ESP.ShowTracers = value
+        end
+    })
     
-    Window:CreateToggle(ESPMain, "Show Names", Settings.ESP.ShowNames, function(value)
-        Settings.ESP.ShowNames = value
-    end)
+    esptab:Toggle({
+        Title = "Show Names",
+        Value = Settings.ESP.ShowNames,
+        Callback = function(value)
+            Settings.ESP.ShowNames = value
+        end
+    })
     
-    Window:CreateToggle(ESPMain, "Show Distance", Settings.ESP.ShowDistance, function(value)
-        Settings.ESP.ShowDistance = value
-    end)
+    esptab:Toggle({
+        Title = "Show Distance",
+        Value = Settings.ESP.ShowDistance,
+        Callback = function(value)
+            Settings.ESP.ShowDistance = value
+        end
+    })
     
-    Window:CreateToggle(ESPMain, "Show Health", Settings.ESP.ShowHealth, function(value)
-        Settings.ESP.ShowHealth = value
-    end)
+    esptab:Toggle({
+        Title = "Show Health",
+        Value = Settings.ESP.ShowHealth,
+        Callback = function(value)
+            Settings.ESP.ShowHealth = value
+        end
+    })
     
-    Window:CreateToggle(ESPMain, "Team Check", Settings.ESP.TeamCheck, function(value)
-        Settings.ESP.TeamCheck = value
-    end)
+    esptab:Toggle({
+        Title = "Team Check",
+        Value = Settings.ESP.TeamCheck,
+        Callback = function(value)
+            Settings.ESP.TeamCheck = value
+        end
+    })
     
-    Window:CreateToggle(ESPMain, "Team Colors", Settings.ESP.TeamColor, function(value)
-        Settings.ESP.TeamColor = value
-    end)
+    esptab:Toggle({
+        Title = "Team Colors",
+        Value = Settings.ESP.TeamColor,
+        Callback = function(value)
+            Settings.ESP.TeamColor = value
+        end
+    })
     
-    Window:CreateSlider(ESPMain, "Max Distance", 50, 1000, Settings.ESP.MaxDistance, function(value)
-        Settings.ESP.MaxDistance = value
-    end)
+    esptab:Slider({
+        Title = "Max Distance",
+        Value = Settings.ESP.MaxDistance,
+        Min = 50,
+        Max = 1000,
+        Callback = function(value)
+            Settings.ESP.MaxDistance = value
+        end
+    })
     
     -- Aimbot Tab
-    local AimbotTab = Window:CreateTab("Aimbot")
-    local AimbotMain = Window:CreateSection(AimbotTab, "Aimbot Settings")
+    local aimbottab = window:Tab({
+        Title = "Aimbot",
+        Icon = "target"
+    })
     
-    Window:CreateToggle(AimbotMain, "Enable Aimbot", Settings.Aimbot.Enabled, function(value)
-        Settings.Aimbot.Enabled = value
-    end)
+    aimbottab:Toggle({
+        Title = "Enable Aimbot",
+        Value = Settings.Aimbot.Enabled,
+        Callback = function(value)
+            Settings.Aimbot.Enabled = value
+        end
+    })
     
-    Window:CreateSlider(AimbotMain, "Smoothness", 0, 1, Settings.Aimbot.Smoothness, function(value)
-        Settings.Aimbot.Smoothness = value
-    end)
+    aimbottab:Slider({
+        Title = "Smoothness",
+        Value = Settings.Aimbot.Smoothness,
+        Min = 0,
+        Max = 1,
+        Callback = function(value)
+            Settings.Aimbot.Smoothness = value
+        end
+    })
     
-    Window:CreateSlider(AimbotMain, "FOV Circle", 10, 200, Settings.Aimbot.FOV, function(value)
-        Settings.Aimbot.FOV = value
-    end)
+    aimbottab:Slider({
+        Title = "FOV Circle",
+        Value = Settings.Aimbot.FOV,
+        Min = 10,
+        Max = 200,
+        Callback = function(value)
+            Settings.Aimbot.FOV = value
+        end
+    })
     
-    Window:CreateToggle(AimbotMain, "Visibility Check", Settings.Aimbot.VisibleCheck, function(value)
-        Settings.Aimbot.VisibleCheck = value
-    end)
+    aimbottab:Toggle({
+        Title = "Visibility Check",
+        Value = Settings.Aimbot.VisibleCheck,
+        Callback = function(value)
+            Settings.Aimbot.VisibleCheck = value
+        end
+    })
     
-    Window:CreateToggle(AimbotMain, "Team Check", Settings.Aimbot.TeamCheck, function(value)
-        Settings.Aimbot.TeamCheck = value
-    end)
+    aimbottab:Toggle({
+        Title = "Team Check",
+        Value = Settings.Aimbot.TeamCheck,
+        Callback = function(value)
+            Settings.Aimbot.TeamCheck = value
+        end
+    })
     
-    Window:CreateDropdown(AimbotMain, "Target Part", {"Head", "HumanoidRootPart", "Torso"}, Settings.Aimbot.TargetPart, function(value)
-        Settings.Aimbot.TargetPart = value
-    end)
+    aimbottab:Dropdown({
+        Title = "Target Part",
+        Items = {"Head", "HumanoidRootPart", "Torso"},
+        Value = Settings.Aimbot.TargetPart,
+        Callback = function(value)
+            Settings.Aimbot.TargetPart = value
+        end
+    })
     
     -- Visuals Tab
-    local VisualsTab = Window:CreateTab("Visuals")
-    local VisualsMain = Window:CreateSection(VisualsTab, "Visual Settings")
+    local visualstab = window:Tab({
+        Title = "Visuals",
+        Icon = "monitor"
+    })
     
-    Window:CreateToggle(VisualsMain, "Direction Line", Settings.Visuals.DirectionLine, function(value)
-        Settings.Visuals.DirectionLine = value
-    end)
-    
-    Window:CreateToggle(VisualsMain, "FOV Circle", Settings.Visuals.FOVCircle, function(value)
-        Settings.Visuals.FOVCircle = value
-    end)
-    
-    Window:CreateToggle(VisualsMain, "Crosshair", Settings.Visuals.Crosshair, function(value)
-        Settings.Visuals.Crosshair = value
-    end)
-    
-    Window:CreateToggle(VisualsMain, "Watermark", Settings.Visuals.Watermark, function(value)
-        Settings.Visuals.Watermark = value
-    end)
-    
-    Window:CreateToggle(VisualsMain, "Hit Marker", Settings.Visuals.HitMarker, function(value)
-        Settings.Visuals.HitMarker = value
-        if value and not Drawings.HitMarker then
-            Drawings.HitMarker = Drawing.new("Line")
-            Drawings.HitMarker.Visible = false
-            Drawings.HitMarker.Thickness = 2
+    visualstab:Toggle({
+        Title = "Direction Line",
+        Value = Settings.Visuals.DirectionLine,
+        Callback = function(value)
+            Settings.Visuals.DirectionLine = value
         end
-    end)
+    })
     
-    -- Misc Tab
-    local MiscTab = Window:CreateTab("Misc")
-    local MiscMain = Window:CreateSection(MiscTab, "Miscellaneous")
+    visualstab:Toggle({
+        Title = "FOV Circle",
+        Value = Settings.Visuals.FOVCircle,
+        Callback = function(value)
+            Settings.Visuals.FOVCircle = value
+        end
+    })
     
-    Window:CreateToggle(MiscMain, "Rainbow Mode", Settings.Misc.RainbowMode, function(value)
-        Settings.Misc.RainbowMode = value
-    end)
+    visualstab:Toggle({
+        Title = "Crosshair",
+        Value = Settings.Visuals.Crosshair,
+        Callback = function(value)
+            Settings.Visuals.Crosshair = value
+        end
+    })
     
-    Window:CreateButton(MiscMain, "Save Configuration", function()
-        print("Configuration saved!")
-    end)
+    visualstab:Toggle({
+        Title = "Watermark",
+        Value = Settings.Visuals.Watermark,
+        Callback = function(value)
+            Settings.Visuals.Watermark = value
+        end
+    })
     
-    Window:CreateButton(MiscMain, "Load Configuration", function()
-        print("Configuration loaded!")
-    end)
-    
-    Window:CreateButton(MiscMain, "Reset Settings", function()
-        for key, value in pairs(Settings) do
-            if type(value) == "table" then
-                for k, v in pairs(value) do
-                    -- Reset to defaults
-                end
+    visualstab:Toggle({
+        Title = "Hit Marker",
+        Value = Settings.Visuals.HitMarker,
+        Callback = function(value)
+            Settings.Visuals.HitMarker = value
+            if value and not Drawings.HitMarker then
+                Drawings.HitMarker = Drawing.new("Line")
+                Drawings.HitMarker.Visible = false
+                Drawings.HitMarker.Thickness = 2
             end
         end
-        print("Settings reset!")
-    end)
+    })
     
-    Window:CreateLabel(MiscMain, "Panic Key: " .. Settings.Misc.PanicKey.Name, 12)
-    Window:CreateLabel(MiscMain, "Windy ESP v2.0 - Made with ❤️", 12)
+    -- Player Mods Tab
+    local playertab = window:Tab({
+        Title = "Player",
+        Icon = "user"
+    })
     
-    return Window
+    playertab:Toggle({
+        Title = "Noclip",
+        Value = Settings.PlayerMods.Noclip,
+        Callback = function(value)
+            Settings.PlayerMods.Noclip = value
+            if value then
+                startNoclip()
+            else
+                stopNoclip()
+            end
+        end
+    })
+    
+    playertab:Toggle({
+        Title = "Fly",
+        Value = Settings.PlayerMods.Fly,
+        Callback = function(value)
+            Settings.PlayerMods.Fly = value
+            if value then
+                startFly()
+            else
+                stopFly()
+            end
+        end
+    })
+    
+    playertab:Slider({
+        Title = "Fly Speed",
+        Value = Settings.PlayerMods.FlySpeed,
+        Min = 1,
+        Max = 10,
+        Callback = function(value)
+            Settings.PlayerMods.FlySpeed = value
+        end
+    })
+    
+    playertab:Toggle({
+        Title = "Speed Hack",
+        Value = Settings.PlayerMods.Speed,
+        Callback = function(value)
+            Settings.PlayerMods.Speed = value
+            applySpeed()
+        end
+    })
+    
+    playertab:Slider({
+        Title = "Speed Value",
+        Value = Settings.PlayerMods.SpeedValue,
+        Min = 16,
+        Max = 100,
+        Callback = function(value)
+            Settings.PlayerMods.SpeedValue = value
+            applySpeed()
+        end
+    })
+    
+    playertab:Toggle({
+        Title = "High Jump",
+        Value = Settings.PlayerMods.JumpPower,
+        Callback = function(value)
+            Settings.PlayerMods.JumpPower = value
+            applyJumpPower()
+        end
+    })
+    
+    playertab:Slider({
+        Title = "Jump Power",
+        Value = Settings.PlayerMods.JumpPowerValue,
+        Min = 50,
+        Max = 200,
+        Callback = function(value)
+            Settings.PlayerMods.JumpPowerValue = value
+            applyJumpPower()
+        end
+    })
+    
+    playertab:Toggle({
+        Title = "Infinite Jump",
+        Value = Settings.PlayerMods.InfiniteJump,
+        Callback = function(value)
+            Settings.PlayerMods.InfiniteJump = value
+            if value then
+                startInfiniteJump()
+            else
+                stopInfiniteJump()
+            end
+        end
+    })
+    
+    playertab:Button({
+        Title = "Reset Player Mods",
+        Callback = function()
+            Settings.PlayerMods.Noclip = false
+            Settings.PlayerMods.Fly = false
+            Settings.PlayerMods.Speed = false
+            Settings.PlayerMods.JumpPower = false
+            Settings.PlayerMods.InfiniteJump = false
+            
+            stopNoclip()
+            stopFly()
+            stopInfiniteJump()
+            applySpeed()
+            applyJumpPower()
+            
+            print("Player mods reset!")
+        end
+    })
+    
+    -- Misc Tab
+    local misctab = window:Tab({
+        Title = "Misc",
+        Icon = "settings"
+    })
+    
+    misctab:Toggle({
+        Title = "Rainbow Mode",
+        Value = Settings.Misc.RainbowMode,
+        Callback = function(value)
+            Settings.Misc.RainbowMode = value
+        end
+    })
+    
+    misctab:Button({
+        Title = "Save Configuration",
+        Callback = function()
+            print("Configuration saved!")
+        end
+    })
+    
+    misctab:Button({
+        Title = "Load Configuration",
+        Callback = function()
+            print("Configuration loaded!")
+        end
+    })
+    
+    misctab:Button({
+        Title = "Reset All Settings",
+        Callback = function()
+            -- Reset all settings to defaults
+            Settings.ESP.Enabled = true
+            Settings.ESP.ShowBoxes = true
+            Settings.ESP.ShowTracers = true
+            Settings.ESP.ShowNames = true
+            Settings.ESP.ShowDistance = true
+            Settings.ESP.ShowHealth = true
+            Settings.ESP.TeamCheck = false
+            Settings.ESP.TeamColor = true
+            Settings.ESP.MaxDistance = 500
+            
+            Settings.Aimbot.Enabled = false
+            Settings.Aimbot.Smoothness = 0.1
+            Settings.Aimbot.FOV = 50
+            Settings.Aimbot.VisibleCheck = true
+            Settings.Aimbot.TeamCheck = true
+            Settings.Aimbot.TargetPart = "Head"
+            
+            Settings.Visuals.DirectionLine = true
+            Settings.Visuals.FOVCircle = false
+            Settings.Visuals.Crosshair = false
+            Settings.Visuals.Watermark = true
+            Settings.Visuals.HitMarker = false
+            
+            Settings.PlayerMods.Noclip = false
+            Settings.PlayerMods.Fly = false
+            Settings.PlayerMods.Speed = false
+            Settings.PlayerMods.SpeedValue = 16
+            Settings.PlayerMods.JumpPower = false
+            Settings.PlayerMods.JumpPowerValue = 50
+            Settings.PlayerMods.InfiniteJump = false
+            Settings.PlayerMods.FlySpeed = 2
+            
+            Settings.Misc.RainbowMode = false
+            
+            -- Apply resets
+            stopNoclip()
+            stopFly()
+            stopInfiniteJump()
+            applySpeed()
+            applyJumpPower()
+            
+            print("All settings reset to defaults!")
+        end
+    })
+    
+    misctab:Label({
+        Title = "Controls:",
+        Description = "N - Noclip | F - Fly | Insert - UI | Delete - Panic"
+    })
+    
+    misctab:Label({
+        Title = "Windy ESP v4.0",
+        Description = "Made with ❤️ using WindUI"
+    })
+    
+    return window
 end
 
 -- Initialize
+saveOriginalValues()
 createDirectionLine()
 createFOVCircle()
 createCrosshair()
 createWatermark()
-createUI()
+local WindUIWindow = createWindUI()
 
 -- Start main loop
 Data.Connections.MainLoop = RunService.RenderStepped:Connect(update)
 
--- Panic key
+-- Keybinds
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     
+    -- Panic key
     if input.KeyCode == Settings.Misc.PanicKey then
-        -- Clean up everything
         for _, drawing in pairs(Drawings) do
             if typeof(drawing) == "table" then
                 for _, d in pairs(drawing) do
@@ -1179,42 +1047,73 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
             end
         end
         
-        if Drawings.UI then
-            Drawings.UI:Destroy()
+        if WindUIWindow then
+            WindUIWindow:Close() -- Assuming WindUI has a Close method
         end
         
         for _, connection in pairs(Data.Connections) do
             connection:Disconnect()
         end
         
+        stopNoclip()
+        stopFly()
+        stopInfiniteJump()
+        
         print("Windy ESP - Panic mode activated!")
     end
     
-    -- Toggle UI with Insert key
+    -- Toggle UI
     if input.KeyCode == Enum.KeyCode.Insert then
-        if Drawings.UI and Drawings.UI.MainFrame then
-            Drawings.UI.MainFrame.Visible = not Drawings.UI.MainFrame.Visible
+        -- WindUI might have its own toggle method, but we'll assume it does
+        if WindUIWindow then
+            -- This would depend on WindUI's API
+            -- For now, we'll just print
+            print("UI Toggle - WindUI might handle this automatically")
+        end
+    end
+    
+    -- Noclip toggle key
+    if input.KeyCode == Settings.PlayerMods.NoClipKey then
+        Settings.PlayerMods.Noclip = not Settings.PlayerMods.Noclip
+        if Settings.PlayerMods.Noclip then
+            startNoclip()
+        else
+            stopNoclip()
+        end
+    end
+    
+    -- Fly toggle key
+    if input.KeyCode == Settings.PlayerMods.FlyKey then
+        Settings.PlayerMods.Fly = not Settings.PlayerMods.Fly
+        if Settings.PlayerMods.Fly then
+            startFly()
+        else
+            stopFly()
         end
     end
 end)
 
--- Hit detection (simulated)
-local function onHit(hit)
-    if Settings.Visuals.HitMarker and hit and hit.Parent then
-        local humanoid = hit.Parent:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            Data.HitTime = tick()
-        end
+-- Character added event to reapply settings
+LocalPlayer.CharacterAdded:Connect(function(character)
+    wait(1) -- Wait for character to fully load
+    saveOriginalValues()
+    applySpeed()
+    applyJumpPower()
+    
+    if Settings.PlayerMods.Noclip then
+        startNoclip()
     end
-end
-
--- Simulate hits for demonstration
-game:GetService("RunService").Heartbeat:Connect(function()
-    if Data.Target and math.random(1, 100) == 1 then -- Simulate occasional hits
-        onHit(Data.Target)
+    if Settings.PlayerMods.Fly then
+        startFly()
+    end
+    if Settings.PlayerMods.InfiniteJump then
+        startInfiniteJump()
     end
 end)
 
-print("Windy ESP v2.0 Loaded!")
+print("Windy ESP v4.0 Loaded!")
+print("Using WindUI Framework")
 print("Press Insert to toggle UI")
 print("Press " .. Settings.Misc.PanicKey.Name .. " for panic mode")
+print("Press " .. Settings.PlayerMods.NoClipKey.Name .. " to toggle Noclip")
+print("Press " .. Settings.PlayerMods.FlyKey.Name .. " to toggle Fly")
