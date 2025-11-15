@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
@@ -12,34 +13,68 @@ screenGui.Name = "AdminPanel"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
+-- Main Frame
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 300, 0, 400)
-frame.Position = UDim2.new(0, 10, 0, 10)
-frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+frame.Size = UDim2.new(0, 320, 0, 420)
+frame.Position = UDim2.new(0, 20, 0, 20)
+frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 frame.BorderSizePixel = 0
+frame.AnchorPoint = Vector2.new(0,0)
 frame.Parent = screenGui
+frame.Active = true
+frame.Draggable = true  -- kéo GUI
 
+-- UI Gradient
+local gradient = Instance.new("UIGradient")
+gradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(70,70,70)),
+                                    ColorSequenceKeypoint.new(1, Color3.fromRGB(35,35,35))})
+gradient.Rotation = 45
+gradient.Parent = frame
+
+-- Title
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1,0,0,40)
+title.Position = UDim2.new(0,0,0,0)
+title.BackgroundTransparency = 1
+title.Text = "Admin Panel"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 22
+title.TextColor3 = Color3.fromRGB(255,255,255)
+title.Parent = frame
+
+-- Section function
 local function createButton(text, y)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(1, -20, 0, 40)
     btn.Position = UDim2.new(0, 10, 0, y)
-    btn.BackgroundColor3 = Color3.fromRGB(65, 65, 65)
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    btn.BorderSizePixel = 0
+    btn.TextColor3 = Color3.fromRGB(255,255,255)
     btn.Text = text
-    btn.Font = Enum.Font.SourceSansBold
-    btn.TextSize = 20
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 18
     btn.Parent = frame
+
+    -- Hover effect
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(90,90,90)}):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(60,60,60)}):Play()
+    end)
+
     return btn
 end
 
 -- ===== Buttons =====
-local espButton = createButton("ESP: OFF", 10)
-local teamCheckESPButton = createButton("TeamCheck ESP: ON", 60)
-local aimButton = createButton("AIM: OFF", 110)
-local teamCheckAimButton = createButton("TeamCheck AIM: ON", 160)
-local wallCheckButton = createButton("WallCheck: ON", 210)
-local flyButton = createButton("FLY: OFF", 260)
-local noclipButton = createButton("Noclip: OFF", 310)
+local y = 60
+local espButton = createButton("ESP: OFF", y); y = y + 50
+local teamCheckESPButton = createButton("TeamCheck ESP: ON", y); y = y + 50
+local aimButton = createButton("AIM: OFF", y); y = y + 50
+local teamCheckAimButton = createButton("TeamCheck AIM: ON", y); y = y + 50
+local wallCheckButton = createButton("WallCheck: ON", y); y = y + 50
+local flyButton = createButton("FLY: OFF", y); y = y + 50
+local noclipButton = createButton("Noclip: OFF", y)
 
 -- ===== Flags =====
 local espEnabled = false
@@ -49,8 +84,6 @@ local noclipEnabled = false
 local teamCheckESP = true
 local teamCheckAim = true
 local wallCheck = true
-
--- ===== Settings =====
 local aimStrength = 0.25
 local aimDistance = 200
 
@@ -76,8 +109,8 @@ local function addESP(character, plr)
     local hl = Instance.new("Highlight")
     hl.Name = "Highlight"
     hl.Parent = character
-    hl.FillColor = Color3.fromRGB(0, 255, 0)
-    hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+    hl.FillColor = Color3.fromRGB(0,255,0)
+    hl.OutlineColor = Color3.fromRGB(255,255,255)
     hl.FillTransparency = 0.5
 end
 
@@ -112,30 +145,22 @@ end)
 
 Players.PlayerAdded:Connect(function(plr)
     plr.CharacterAdded:Connect(function(char)
-        if espEnabled then
-            addESP(char, plr)
-        end
+        if espEnabled then addESP(char, plr) end
     end)
 end)
 
 player.CharacterAdded:Connect(function(char)
     if espEnabled then
         for _, plr in pairs(Players:GetPlayers()) do
-            if plr.Character then
-                addESP(plr.Character, plr)
-            end
+            if plr.Character then addESP(plr.Character, plr) end
         end
     end
     if noclipEnabled then
         for _, part in pairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
+            if part:IsA("BasePart") then part.CanCollide = false end
         end
     end
-    if flyEnabled then
-        startFly()
-    end
+    if flyEnabled then startFly() end
 end)
 
 -- ===== Smooth Aim =====
@@ -201,23 +226,19 @@ end
 flyButton.MouseButton1Click:Connect(function()
     flyEnabled = not flyEnabled
     flyButton.Text = "FLY: " .. (flyEnabled and "ON" or "OFF")
-    if flyEnabled then
-        startFly()
-    else
-        stopFly()
-    end
+    if flyEnabled then startFly() else stopFly() end
 end)
 RunService.RenderStepped:Connect(function(dt)
     if flyEnabled and bodyVelocity then
-        local direction = Vector3.new()
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then direction = direction + Camera.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then direction = direction - Camera.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then direction = direction - Camera.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then direction = direction + Camera.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then direction = direction + Vector3.new(0,1,0) end
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then direction = direction - Vector3.new(0,1,0) end
-        if direction.Magnitude > 0 then
-            bodyVelocity.Velocity = direction.Unit * flySpeed
+        local dir = Vector3.new()
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + Camera.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - Camera.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir = dir - Camera.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + Camera.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0,1,0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir = dir - Vector3.new(0,1,0) end
+        if dir.Magnitude > 0 then
+            bodyVelocity.Velocity = dir.Unit * flySpeed
         else
             bodyVelocity.Velocity = Vector3.new(0,0,0)
         end
