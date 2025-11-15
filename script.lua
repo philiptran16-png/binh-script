@@ -270,13 +270,13 @@ local function createDirectionLine()
     Drawings.DirectionLine = Drawing.new("Line")
     Drawings.DirectionLine.Color = Settings.ESP.BoxColor
     Drawings.DirectionLine.Thickness = 2
-    Drawings.DirectionLine.Visible = Settings.Visuals.DirectionLine
+    Drawings.DirectionLine.Visible = Settings.Visuals.DirectionLine and Settings.ESP.Enabled
 end
 
 local function createFOVCircle()
     if Drawings.FOVCircle then Drawings.FOVCircle:Remove() end
     Drawings.FOVCircle = Drawing.new("Circle")
-    Drawings.FOVCircle.Visible = Settings.Visuals.FOVCircle
+    Drawings.FOVCircle.Visible = Settings.Visuals.FOVCircle and Settings.ESP.Enabled
     Drawings.FOVCircle.Color = Settings.ESP.BoxColor
     Drawings.FOVCircle.Thickness = 2
     Drawings.FOVCircle.NumSides = 32
@@ -291,9 +291,19 @@ local function createCrosshair()
     Drawings.Crosshair.Visible = Settings.Visuals.Crosshair
     Drawings.Crosshair.Color = Color3.new(1, 1, 1)
     Drawings.Crosshair.Thickness = 1
+    
     local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     Drawings.Crosshair.From = Vector2.new(center.X - 8, center.Y)
     Drawings.Crosshair.To = Vector2.new(center.X + 8, center.Y)
+    
+    local crosshair2 = Drawing.new("Line")
+    crosshair2.Visible = Settings.Visuals.Crosshair
+    crosshair2.Color = Color3.new(1, 1, 1)
+    crosshair2.Thickness = 1
+    crosshair2.From = Vector2.new(center.X, center.Y - 8)
+    crosshair2.To = Vector2.new(center.X, center.Y + 8)
+    
+    Drawings.Crosshair2 = crosshair2
 end
 
 local function createWatermark()
@@ -303,18 +313,26 @@ local function createWatermark()
     Drawings.Watermark.Color = Color3.new(1, 1, 1)
     Drawings.Watermark.Size = 16
     Drawings.Watermark.Font = 2
-    Drawings.Watermark.Text = "Windy ESP | FPS: 60 | Ping: 0ms"
+    Drawings.Watermark.Text = "Windy ESP | FPS: 60 | Players: 0"
     Drawings.Watermark.Position = Vector2.new(10, 10)
 end
 
 -- Update functions
 local function updateDirectionLine()
-    if not Drawings.DirectionLine or not Settings.Visuals.DirectionLine then return end
+    if not Drawings.DirectionLine then return end
+    
+    if not Settings.Visuals.DirectionLine or not Settings.ESP.Enabled then
+        Drawings.DirectionLine.Visible = false
+        return
+    end
+    
     local lookVector = Camera.CFrame.LookVector
     local startPos = Camera.CFrame.Position
     local endPos = startPos + lookVector * Settings.ESP.MaxDistance
+    
     local startVector, startVisible = Camera:WorldToViewportPoint(startPos)
     local endVector, endVisible = Camera:WorldToViewportPoint(endPos)
+    
     if startVisible and endVisible then
         Drawings.DirectionLine.From = Vector2.new(startVector.X, startVector.Y)
         Drawings.DirectionLine.To = Vector2.new(endVector.X, endVector.Y)
@@ -326,23 +344,46 @@ local function updateDirectionLine()
 end
 
 local function updateFOVCircle()
-    if not Drawings.FOVCircle or not Settings.Visuals.FOVCircle then return end
-    Drawings.FOVCircle.Visible = Settings.Visuals.FOVCircle
+    if not Drawings.FOVCircle then return end
+    
+    if not Settings.Visuals.FOVCircle or not Settings.ESP.Enabled then
+        Drawings.FOVCircle.Visible = false
+        return
+    end
+    
+    Drawings.FOVCircle.Visible = true
     Drawings.FOVCircle.Color = Settings.ESP.BoxColor
     Drawings.FOVCircle.Radius = Settings.Aimbot.FOV
     Drawings.FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 end
 
 local function updateCrosshair()
-    if not Drawings.Crosshair or not Settings.Visuals.Crosshair then return end
+    if not Drawings.Crosshair or not Drawings.Crosshair2 then return end
+    
+    if not Settings.Visuals.Crosshair then
+        Drawings.Crosshair.Visible = false
+        Drawings.Crosshair2.Visible = false
+        return
+    end
+    
     local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     Drawings.Crosshair.From = Vector2.new(center.X - 8, center.Y)
     Drawings.Crosshair.To = Vector2.new(center.X + 8, center.Y)
     Drawings.Crosshair.Visible = true
+    
+    Drawings.Crosshair2.From = Vector2.new(center.X, center.Y - 8)
+    Drawings.Crosshair2.To = Vector2.new(center.X, center.Y + 8)
+    Drawings.Crosshair2.Visible = true
 end
 
 local function updateWatermark()
-    if not Drawings.Watermark or not Settings.Visuals.Watermark then return end
+    if not Drawings.Watermark then return end
+    
+    if not Settings.Visuals.Watermark then
+        Drawings.Watermark.Visible = false
+        return
+    end
+    
     local fps = math.floor(1 / RunService.RenderStepped:Wait())
     Drawings.Watermark.Text = string.format("Windy ESP | FPS: %d | Players: %d", fps, #Players:GetPlayers())
     Drawings.Watermark.Visible = true
@@ -350,14 +391,14 @@ end
 
 local function updateESP()
     -- Clear existing ESP drawings
-    for _, esp in pairs(Drawings.ESPs) do
-        if esp.Box then esp.Box:Remove() end
-        if esp.Tracer then esp.Tracer:Remove() end
-        if esp.Name then esp.Name:Remove() end
-        if esp.Distance then esp.Distance:Remove() end
-        if esp.Health then esp.Health:Remove() end
-        if esp.HealthBar then esp.HealthBar:Remove() end
-        if esp.HealthBarOutline then esp.HealthBarOutline:Remove() end
+    for player, espData in pairs(Drawings.ESPs) do
+        if espData.Box then espData.Box:Remove() end
+        if espData.Tracer then espData.Tracer:Remove() end
+        if espData.Name then espData.Name:Remove() end
+        if espData.Distance then espData.Distance:Remove() end
+        if espData.Health then espData.Health:Remove() end
+        if espData.HealthBar then espData.HealthBar:Remove() end
+        if espData.HealthBarOutline then espData.HealthBarOutline:Remove() end
     end
     Drawings.ESPs = {}
     
@@ -413,6 +454,7 @@ local function updateESP()
                     espData.Name.Size = 14
                     espData.Name.Font = 2
                     espData.Name.Text = player.Name
+                    espData.Name.Outline = true
                 end
                 
                 -- Distance
@@ -423,6 +465,7 @@ local function updateESP()
                     espData.Distance.Size = 12
                     espData.Distance.Font = 2
                     espData.Distance.Text = string.format("[%d]", distance)
+                    espData.Distance.Outline = true
                 end
                 
                 -- Health
@@ -433,6 +476,7 @@ local function updateESP()
                     espData.Health.Size = 12
                     espData.Health.Font = 2
                     espData.Health.Text = string.format("%d", humanoid.Health)
+                    espData.Health.Outline = true
                     
                     -- Health bar
                     espData.HealthBarOutline = Drawing.new("Square")
@@ -458,8 +502,8 @@ local function updateESP()
                     
                     if headVisible then
                         local scaleFactor = 1 / (headPos.Z * math.tan(math.rad(Camera.FieldOfView * 0.5)) * 2) * 100
-                        local width = 4 * scaleFactor
-                        local height = 6 * scaleFactor
+                        local width = 50 * scaleFactor
+                        local height = 80 * scaleFactor
                         
                         -- Box ESP
                         if espData.Box then
@@ -495,9 +539,9 @@ local function updateESP()
                             -- Health bar
                             local healthPercent = humanoid.Health / humanoid.MaxHealth
                             local barWidth = width
-                            local barHeight = 3
+                            local barHeight = 4
                             local barX = headPos.X - width / 2
-                            local barY = headPos.Y - height / 2 - 8
+                            local barY = headPos.Y - height / 2 - 10
                             
                             espData.HealthBarOutline.Size = Vector2.new(barWidth, barHeight)
                             espData.HealthBarOutline.Position = Vector2.new(barX, barY)
@@ -511,7 +555,7 @@ local function updateESP()
                     else
                         -- Hide all if not visible
                         for _, drawing in pairs(espData) do
-                            if drawing then
+                            if drawing and typeof(drawing) == "table" and drawing.Visible ~= nil then
                                 drawing.Visible = false
                             end
                         end
@@ -544,7 +588,7 @@ local function updateAimbot()
                 -- Visible check
                 if Settings.Aimbot.VisibleCheck then
                     local ray = Ray.new(Camera.CFrame.Position, (targetPart.Position - Camera.CFrame.Position).Unit * Settings.ESP.MaxDistance)
-                    local hit = workspace:FindPartOnRayWithIgnoreList(ray, {LocalPlayer.Character, Camera})
+                    local hit, position = workspace:FindPartOnRayWithIgnoreList(ray, {LocalPlayer.Character, Camera})
                     if hit and hit:IsDescendantOf(character) == false then
                         continue
                     end
@@ -601,102 +645,89 @@ local function update()
     -- Update player mods
     applySpeed()
     applyJumpPower()
-    
-    -- Update hit marker
-    if Drawings.HitMarker then
-        local timeSinceHit = tick() - Data.HitTime
-        if timeSinceHit < 0.3 then
-            local alpha = 1 - (timeSinceHit / 0.3)
-            Drawings.HitMarker.Color = Color3.new(1, 1, 1)
-            Drawings.HitMarker.Visible = true
-        else
-            Drawings.HitMarker.Visible = false
-        end
-    end
 end
 
 -- Create WindUI Interface
 local function createWindUI()
-    local window = WindUI:Window({
+    local window = WindUI:CreateWindow({
         Title = "Windy ESP v4.0",
-        Icon = "settings",
-        Size = UDim2.new(0, 500, 0, 500),
-        Position = UDim2.new(0, 20, 0, 20)
+        Icon = "http://www.roblox.com/asset/?id=6035067836", -- Settings icon
+        Size = UDim2.new(0, 500, 0, 500)
     })
     
     -- ESP Tab
-    local esptab = window:Tab({
+    local esptab = window:CreateTab({
         Title = "ESP",
-        Icon = "eye"
+        Icon = "http://www.roblox.com/asset/?id=6035067851" -- Eye icon
     })
     
-    esptab:Toggle({
+    esptab:CreateToggle({
         Title = "Enable ESP",
-        Value = Settings.ESP.Enabled,
+        Default = Settings.ESP.Enabled,
         Callback = function(value)
             Settings.ESP.Enabled = value
         end
     })
     
-    esptab:Toggle({
+    esptab:CreateToggle({
         Title = "Show Boxes",
-        Value = Settings.ESP.ShowBoxes,
+        Default = Settings.ESP.ShowBoxes,
         Callback = function(value)
             Settings.ESP.ShowBoxes = value
         end
     })
     
-    esptab:Toggle({
+    esptab:CreateToggle({
         Title = "Show Tracers",
-        Value = Settings.ESP.ShowTracers,
+        Default = Settings.ESP.ShowTracers,
         Callback = function(value)
             Settings.ESP.ShowTracers = value
         end
     })
     
-    esptab:Toggle({
+    esptab:CreateToggle({
         Title = "Show Names",
-        Value = Settings.ESP.ShowNames,
+        Default = Settings.ESP.ShowNames,
         Callback = function(value)
             Settings.ESP.ShowNames = value
         end
     })
     
-    esptab:Toggle({
+    esptab:CreateToggle({
         Title = "Show Distance",
-        Value = Settings.ESP.ShowDistance,
+        Default = Settings.ESP.ShowDistance,
         Callback = function(value)
             Settings.ESP.ShowDistance = value
         end
     })
     
-    esptab:Toggle({
+    esptab:CreateToggle({
         Title = "Show Health",
-        Value = Settings.ESP.ShowHealth,
+        Default = Settings.ESP.ShowHealth,
         Callback = function(value)
             Settings.ESP.ShowHealth = value
         end
     })
     
-    esptab:Toggle({
+    esptab:CreateToggle({
         Title = "Team Check",
-        Value = Settings.ESP.TeamCheck,
+        Default = Settings.ESP.TeamCheck,
         Callback = function(value)
             Settings.ESP.TeamCheck = value
         end
     })
     
-    esptab:Toggle({
+    esptab:CreateToggle({
         Title = "Team Colors",
-        Value = Settings.ESP.TeamColor,
+        Default = Settings.ESP.TeamColor,
         Callback = function(value)
             Settings.ESP.TeamColor = value
         end
     })
     
-    esptab:Slider({
+    esptab:CreateSlider({
         Title = "Max Distance",
-        Value = Settings.ESP.MaxDistance,
+        Default = Settings.ESP.MaxDistance,
         Min = 50,
         Max = 1000,
         Callback = function(value)
@@ -705,22 +736,22 @@ local function createWindUI()
     })
     
     -- Aimbot Tab
-    local aimbottab = window:Tab({
+    local aimbottab = window:CreateTab({
         Title = "Aimbot",
-        Icon = "target"
+        Icon = "http://www.roblox.com/asset/?id=6035067824" -- Target icon
     })
     
-    aimbottab:Toggle({
+    aimbottab:CreateToggle({
         Title = "Enable Aimbot",
-        Value = Settings.Aimbot.Enabled,
+        Default = Settings.Aimbot.Enabled,
         Callback = function(value)
             Settings.Aimbot.Enabled = value
         end
     })
     
-    aimbottab:Slider({
+    aimbottab:CreateSlider({
         Title = "Smoothness",
-        Value = Settings.Aimbot.Smoothness,
+        Default = Settings.Aimbot.Smoothness,
         Min = 0,
         Max = 1,
         Callback = function(value)
@@ -728,9 +759,9 @@ local function createWindUI()
         end
     })
     
-    aimbottab:Slider({
+    aimbottab:CreateSlider({
         Title = "FOV Circle",
-        Value = Settings.Aimbot.FOV,
+        Default = Settings.Aimbot.FOV,
         Min = 10,
         Max = 200,
         Callback = function(value)
@@ -738,72 +769,73 @@ local function createWindUI()
         end
     })
     
-    aimbottab:Toggle({
+    aimbottab:CreateToggle({
         Title = "Visibility Check",
-        Value = Settings.Aimbot.VisibleCheck,
+        Default = Settings.Aimbot.VisibleCheck,
         Callback = function(value)
             Settings.Aimbot.VisibleCheck = value
         end
     })
     
-    aimbottab:Toggle({
+    aimbottab:CreateToggle({
         Title = "Team Check",
-        Value = Settings.Aimbot.TeamCheck,
+        Default = Settings.Aimbot.TeamCheck,
         Callback = function(value)
             Settings.Aimbot.TeamCheck = value
         end
     })
     
-    aimbottab:Dropdown({
+    local targetParts = {"Head", "HumanoidRootPart", "Torso"}
+    aimbottab:CreateDropdown({
         Title = "Target Part",
-        Items = {"Head", "HumanoidRootPart", "Torso"},
-        Value = Settings.Aimbot.TargetPart,
+        Items = targetParts,
+        Default = Settings.Aimbot.TargetPart,
         Callback = function(value)
             Settings.Aimbot.TargetPart = value
         end
     })
     
     -- Visuals Tab
-    local visualstab = window:Tab({
+    local visualstab = window:CreateTab({
         Title = "Visuals",
-        Icon = "monitor"
+        Icon = "http://www.roblox.com/asset/?id=6035067845" -- Monitor icon
     })
     
-    visualstab:Toggle({
+    visualstab:CreateToggle({
         Title = "Direction Line",
-        Value = Settings.Visuals.DirectionLine,
+        Default = Settings.Visuals.DirectionLine,
         Callback = function(value)
             Settings.Visuals.DirectionLine = value
         end
     })
     
-    visualstab:Toggle({
+    visualstab:CreateToggle({
         Title = "FOV Circle",
-        Value = Settings.Visuals.FOVCircle,
+        Default = Settings.Visuals.FOVCircle,
         Callback = function(value)
             Settings.Visuals.FOVCircle = value
         end
     })
     
-    visualstab:Toggle({
+    visualstab:CreateToggle({
         Title = "Crosshair",
-        Value = Settings.Visuals.Crosshair,
+        Default = Settings.Visuals.Crosshair,
         Callback = function(value)
             Settings.Visuals.Crosshair = value
         end
     })
     
-    visualstab:Toggle({
+    visualstab:CreateToggle({
         Title = "Watermark",
-        Value = Settings.Visuals.Watermark,
+        Default = Settings.Visuals.Watermark,
         Callback = function(value)
             Settings.Visuals.Watermark = value
         end
     })
     
-    visualstab:Toggle({
+    visualstab:CreateToggle({
         Title = "Hit Marker",
-        Value = Settings.Visuals.HitMarker,
+        Default = Settings.Visuals.HitMarker,
         Callback = function(value)
             Settings.Visuals.HitMarker = value
             if value and not Drawings.HitMarker then
@@ -815,14 +847,14 @@ local function createWindUI()
     })
     
     -- Player Mods Tab
-    local playertab = window:Tab({
+    local playertab = window:CreateTab({
         Title = "Player",
-        Icon = "user"
+        Icon = "http://www.roblox.com/asset/?id=6035067827" -- User icon
     })
     
-    playertab:Toggle({
+    playertab:CreateToggle({
         Title = "Noclip",
-        Value = Settings.PlayerMods.Noclip,
+        Default = Settings.PlayerMods.Noclip,
         Callback = function(value)
             Settings.PlayerMods.Noclip = value
             if value then
@@ -833,9 +865,9 @@ local function createWindUI()
         end
     })
     
-    playertab:Toggle({
+    playertab:CreateToggle({
         Title = "Fly",
-        Value = Settings.PlayerMods.Fly,
+        Default = Settings.PlayerMods.Fly,
         Callback = function(value)
             Settings.PlayerMods.Fly = value
             if value then
@@ -846,9 +878,9 @@ local function createWindUI()
         end
     })
     
-    playertab:Slider({
+    playertab:CreateSlider({
         Title = "Fly Speed",
-        Value = Settings.PlayerMods.FlySpeed,
+        Default = Settings.PlayerMods.FlySpeed,
         Min = 1,
         Max = 10,
         Callback = function(value)
@@ -856,18 +888,18 @@ local function createWindUI()
         end
     })
     
-    playertab:Toggle({
+    playertab:CreateToggle({
         Title = "Speed Hack",
-        Value = Settings.PlayerMods.Speed,
+        Default = Settings.PlayerMods.Speed,
         Callback = function(value)
             Settings.PlayerMods.Speed = value
             applySpeed()
         end
     })
     
-    playertab:Slider({
+    playertab:CreateSlider({
         Title = "Speed Value",
-        Value = Settings.PlayerMods.SpeedValue,
+        Default = Settings.PlayerMods.SpeedValue,
         Min = 16,
         Max = 100,
         Callback = function(value)
@@ -876,18 +908,18 @@ local function createWindUI()
         end
     })
     
-    playertab:Toggle({
+    playertab:CreateToggle({
         Title = "High Jump",
-        Value = Settings.PlayerMods.JumpPower,
+        Default = Settings.PlayerMods.JumpPower,
         Callback = function(value)
             Settings.PlayerMods.JumpPower = value
             applyJumpPower()
         end
     })
     
-    playertab:Slider({
+    playertab:CreateSlider({
         Title = "Jump Power",
-        Value = Settings.PlayerMods.JumpPowerValue,
+        Default = Settings.PlayerMods.JumpPowerValue,
         Min = 50,
         Max = 200,
         Callback = function(value)
@@ -896,9 +928,9 @@ local function createWindUI()
         end
     })
     
-    playertab:Toggle({
+    playertab:CreateToggle({
         Title = "Infinite Jump",
-        Value = Settings.PlayerMods.InfiniteJump,
+        Default = Settings.PlayerMods.InfiniteJump,
         Callback = function(value)
             Settings.PlayerMods.InfiniteJump = value
             if value then
@@ -909,7 +941,7 @@ local function createWindUI()
         end
     })
     
-    playertab:Button({
+    playertab:CreateButton({
         Title = "Reset Player Mods",
         Callback = function()
             Settings.PlayerMods.Noclip = false
@@ -929,34 +961,34 @@ local function createWindUI()
     })
     
     -- Misc Tab
-    local misctab = window:Tab({
+    local misctab = window:CreateTab({
         Title = "Misc",
-        Icon = "settings"
+        Icon = "http://www.roblox.com/asset/?id=6035067836" -- Settings icon
     })
     
-    misctab:Toggle({
+    misctab:CreateToggle({
         Title = "Rainbow Mode",
-        Value = Settings.Misc.RainbowMode,
+        Default = Settings.Misc.RainbowMode,
         Callback = function(value)
             Settings.Misc.RainbowMode = value
         end
     })
     
-    misctab:Button({
+    misctab:CreateButton({
         Title = "Save Configuration",
         Callback = function()
             print("Configuration saved!")
         end
     })
     
-    misctab:Button({
+    misctab:CreateButton({
         Title = "Load Configuration",
         Callback = function()
             print("Configuration loaded!")
         end
     })
     
-    misctab:Button({
+    misctab:CreateButton({
         Title = "Reset All Settings",
         Callback = function()
             -- Reset all settings to defaults
@@ -1005,14 +1037,14 @@ local function createWindUI()
         end
     })
     
-    misctab:Label({
+    misctab:CreateLabel({
         Title = "Controls:",
-        Description = "N - Noclip | F - Fly | Insert - UI | Delete - Panic"
+        Content = "N - Noclip | F - Fly | Insert - UI | Delete - Panic"
     })
     
-    misctab:Label({
+    misctab:CreateLabel({
         Title = "Windy ESP v4.0",
-        Description = "Made with ❤️ using WindUI"
+        Content = "Made with ❤️ using WindUI"
     })
     
     return window
@@ -1035,41 +1067,37 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     
     -- Panic key
     if input.KeyCode == Settings.Misc.PanicKey then
+        -- Clean up all drawings
         for _, drawing in pairs(Drawings) do
-            if typeof(drawing) == "table" then
-                for _, d in pairs(drawing) do
-                    if d and d.Remove then
-                        d:Remove()
-                    end
-                end
-            elseif drawing and drawing.Remove then
+            if drawing and typeof(drawing) == "table" and drawing.Remove then
+                drawing:Remove()
+            elseif drawing and typeof(drawing) == "userdata" and drawing.Remove then
                 drawing:Remove()
             end
         end
         
-        if WindUIWindow then
-            WindUIWindow:Close() -- Assuming WindUI has a Close method
+        -- Clean up ESP drawings
+        for player, espData in pairs(Drawings.ESPs) do
+            for _, drawing in pairs(espData) do
+                if drawing and drawing.Remove then
+                    drawing:Remove()
+                end
+            end
         end
         
+        -- Stop all connections
         for _, connection in pairs(Data.Connections) do
-            connection:Disconnect()
+            if connection then
+                connection:Disconnect()
+            end
         end
         
+        -- Stop player mods
         stopNoclip()
         stopFly()
         stopInfiniteJump()
         
-        print("Windy ESP - Panic mode activated!")
-    end
-    
-    -- Toggle UI
-    if input.KeyCode == Enum.KeyCode.Insert then
-        -- WindUI might have its own toggle method, but we'll assume it does
-        if WindUIWindow then
-            -- This would depend on WindUI's API
-            -- For now, we'll just print
-            print("UI Toggle - WindUI might handle this automatically")
-        end
+        print("Windy ESP - Panic mode activated! All features disabled.")
     end
     
     -- Noclip toggle key
@@ -1077,8 +1105,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         Settings.PlayerMods.Noclip = not Settings.PlayerMods.Noclip
         if Settings.PlayerMods.Noclip then
             startNoclip()
+            print("Noclip: Enabled")
         else
             stopNoclip()
+            print("Noclip: Disabled")
         end
     end
     
@@ -1087,8 +1117,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         Settings.PlayerMods.Fly = not Settings.PlayerMods.Fly
         if Settings.PlayerMods.Fly then
             startFly()
+            print("Fly: Enabled")
         else
             stopFly()
+            print("Fly: Disabled")
         end
     end
 end)
@@ -1113,7 +1145,6 @@ end)
 
 print("Windy ESP v4.0 Loaded!")
 print("Using WindUI Framework")
-print("Press Insert to toggle UI")
 print("Press " .. Settings.Misc.PanicKey.Name .. " for panic mode")
 print("Press " .. Settings.PlayerMods.NoClipKey.Name .. " to toggle Noclip")
 print("Press " .. Settings.PlayerMods.FlyKey.Name .. " to toggle Fly")
