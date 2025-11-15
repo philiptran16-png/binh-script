@@ -1,3 +1,5 @@
+# User Interface Script
+
 local Player = game.Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
 local ScreenGui = Instance.new("ScreenGui", PlayerGui)
@@ -103,3 +105,24 @@ local function autoServerHop()
     print("Auto server hop...")
     return true -- Ensure it returns a boolean
 end
+
+-- Create a UI frame
+local frame = Instance.new("Frame")
+frame.Name = "UIFrame"
+frame.Size = UDim2.new(0, 500, 0, 300)
+frame.Position = UDim2.new(0, 100, 0, 100)
+
+-- Create a UI label
+local label = Instance.new("TextLabel")
+label.Name = "UILabel"
+label.Text = "Hello World!"
+label.Size = UDim2.new(0, 200, 0, 50)
+label.Position = UDim2.new(0, 50, 0, 50)
+label.Font = Enum.Font.SourceSans
+label.FontSize = Enum.FontSize.Size24
+
+-- Add the UI frame to the screen
+frame.Parent = game.StarterGui
+
+-- Add the UI label to the UI frame
+label.Parent = frame
