@@ -32,6 +32,26 @@ local FlyEnabled, NoclipEnabled, RadarEnabled, AntiFlingEnabled = false, false, 
 local PerformanceEnabled, AutoFPSBoost, MemoryCleaner, NetworkOptimizer, RenderDistanceManager = false, false, false, false, false
 local ShowEnemyFOV, PatrolRoutePrediction, SoundVisualization, ObjectiveTracker = false, false, false, false
 local CurrentTheme = "Default"
+local TeleportEnabled, SavePositions, QuickTeleportKeys, SpawnTeleport, ObjectiveTeleport, SafeSpotTeleport = false, false, false, false, false, false
+
+-- Custom Aimbot Key System
+local AimKey = Enum.UserInputType.MouseButton2 -- Default to Right Mouse Button
+local waitingForAimKey = false
+local AimKeyNames = {
+    [Enum.UserInputType.MouseButton1] = "Mouse Left",
+    [Enum.UserInputType.MouseButton2] = "Mouse Right",
+    [Enum.UserInputType.MouseButton3] = "Mouse Middle",
+    [Enum.KeyCode.LeftControl] = "Left Ctrl",
+    [Enum.KeyCode.LeftShift] = "Left Shift",
+    [Enum.KeyCode.CapsLock] = "Caps Lock",
+    [Enum.KeyCode.Q] = "Q",
+    [Enum.KeyCode.E] = "E",
+    [Enum.KeyCode.F] = "F",
+    [Enum.KeyCode.X] = "X",
+    [Enum.KeyCode.Z] = "Z",
+    [Enum.KeyCode.Space] = "Space"
+}
+
 local Themes = {
     Default = {
         Primary = Color3.fromHex("#30FF6A"),
@@ -59,6 +79,15 @@ local Themes = {
     }
 }
 
+-- Teleport System Variables
+local SavedPositions = {}
+local TeleportHotkeys = {
+    [Enum.KeyCode.F1] = "Position1",
+    [Enum.KeyCode.F2] = "Position2", 
+    [Enum.KeyCode.F3] = "Position3",
+    [Enum.KeyCode.F4] = "Position4"
+}
+
 local config = {
     ESPEnabled = ESPEnabled,
     ESPTeamCheck = ESPTeamCheck,
@@ -82,12 +111,167 @@ local config = {
     PatrolRoutePrediction = PatrolRoutePrediction,
     SoundVisualization = SoundVisualization,
     ObjectiveTracker = ObjectiveTracker,
-    CurrentTheme = CurrentTheme
+    CurrentTheme = CurrentTheme,
+    TeleportEnabled = TeleportEnabled,
+    SavePositions = SavePositions,
+    QuickTeleportKeys = QuickTeleportKeys,
+    SpawnTeleport = SpawnTeleport,
+    ObjectiveTeleport = ObjectiveTeleport,
+    SafeSpotTeleport = SafeSpotTeleport,
+    AimKey = AimKey
 }
 
 local CONFIG_FILE = "binh_hub_config.json"
 
--- Performance Optimizer System
+-- Custom Aimbot Key System
+local function setAimKey(input)
+    if waitingForAimKey then
+        if input.UserInputType == Enum.UserInputType.Keyboard or 
+           input.UserInputType == Enum.UserInputType.MouseButton1 or 
+           input.UserInputType == Enum.UserInputType.MouseButton2 or
+           input.UserInputType == Enum.UserInputType.MouseButton3 then
+            
+            AimKey = input.UserInputType
+            waitingForAimKey = false
+            print("[.binh Hub] Aimbot key set to: " .. tostring(AimKey))
+            
+            -- Update the button text
+            if AimTab then
+                -- We'll need to update the UI button text
+            end
+        end
+    end
+end
+
+local function startAimKeyBinding()
+    waitingForAimKey = true
+    print("[.binh Hub] Press any key or mouse button to set as aimbot key...")
+end
+
+local function getAimKeyName()
+    if AimKeyNames[AimKey] then
+        return AimKeyNames[AimKey]
+    else
+        return "Key " .. tostring(AimKey)
+    end
+end
+
+-- Teleport System
+local function saveCurrentPosition(positionName)
+    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        SavedPositions[positionName] = player.Character.HumanoidRootPart.Position
+        print("[.binh Hub] Saved position: " .. positionName)
+        return true
+    end
+    return false
+end
+
+local function teleportToPosition(position)
+    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        player.Character.HumanoidRootPart.CFrame = CFrame.new(position)
+        return true
+    end
+    return false
+end
+
+local function teleportToSpawn()
+    local spawnLocations = Workspace:FindFirstChild("SpawnLocation") 
+    if spawnLocations then
+        if spawnLocations:IsA("Part") then
+            teleportToPosition(spawnLocations.Position)
+        else
+            for _, spawn in pairs(spawnLocations:GetChildren()) do
+                if spawn:IsA("Part") then
+                    teleportToPosition(spawn.Position)
+                    break
+                end
+            end
+        end
+    else
+        -- Fallback: find any spawn-like object
+        for _, obj in pairs(Workspace:GetDescendants()) do
+            if string.find(string.lower(obj.Name), "spawn") and obj:IsA("Part") then
+                teleportToPosition(obj.Position)
+                break
+            end
+        end
+    end
+end
+
+local function teleportToObjective()
+    local objectives = Workspace:FindFirstChild("Objectives") or 
+                      Workspace:FindFirstChild("Flags") or 
+                      Workspace:FindFirstChild("ControlPoints")
+    
+    if objectives then
+        for _, obj in pairs(objectives:GetChildren()) do
+            if obj:IsA("Part") then
+                teleportToPosition(obj.Position)
+                return
+            end
+        end
+    end
+    
+    -- Fallback for common objective names
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if (string.find(string.lower(obj.Name), "flag") or 
+            string.find(string.lower(obj.Name), "objective") or
+            string.find(string.lower(obj.Name), "point")) and obj:IsA("Part") then
+            teleportToPosition(obj.Position)
+            break
+        end
+    end
+end
+
+local function findSafeSpot()
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+        return nil
+    end
+    
+    local playerPos = player.Character.HumanoidRootPart.Position
+    local safeSpots = {}
+    
+    -- Look for cover positions
+    for _, part in pairs(Workspace:GetDescendants()) do
+        if part:IsA("Part") and part.Size.Magnitude > 5 then
+            -- Check if this could be cover
+            local coverPos = part.Position + part.CFrame.LookVector * (part.Size.Z/2 + 3)
+            local ray = Ray.new(coverPos, Vector3.new(0, -10, 0))
+            local hit = Workspace:FindPartOnRay(ray, player.Character)
+            
+            if hit then
+                table.insert(safeSpots, coverPos)
+            end
+        end
+    end
+    
+    if #safeSpots > 0 then
+        return safeSpots[math.random(1, #safeSpots)]
+    else
+        -- Return a random position nearby
+        return playerPos + Vector3.new(
+            math.random(-20, 20),
+            0,
+            math.random(-20, 20)
+        )
+    end
+end
+
+-- Initialize teleport system
+local function initTeleportSystem()
+    -- Set up hotkey listening
+    if QuickTeleportKeys then
+        UserInputService.InputBegan:Connect(function(input, gameProcessed)
+            if gameProcessed then return end
+            
+            if TeleportHotkeys[input.KeyCode] and SavedPositions[TeleportHotkeys[input.KeyCode]] then
+                teleportToPosition(SavedPositions[TeleportHotkeys[input.KeyCode]])
+            end
+        end)
+    end
+end
+
+-- Performance Optimizer System (existing)
 local performanceConnection
 local originalSettings = {}
 
@@ -99,16 +283,13 @@ end
 
 local function applyPerformanceOptimizations()
     if AutoFPSBoost then
-        -- Reduce graphics quality
         settings().Rendering.QualityLevel = 1
         GameSettings.SavedQualityLevel.Value = 1
         
-        -- Disable expensive effects
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 100
         Lighting.Brightness = 2
         
-        -- Reduce particles
         for _, effect in pairs(Workspace:GetDescendants()) do
             if effect:IsA("ParticleEmitter") or effect:IsA("Fire") or effect:IsA("Smoke") then
                 effect.Enabled = false
@@ -117,13 +298,11 @@ local function applyPerformanceOptimizations()
     end
     
     if MemoryCleaner then
-        -- Force garbage collection
         game:GetService("GC"):CollectGarbage()
         game:GetService("GC"):RequestGC()
     end
     
     if RenderDistanceManager then
-        -- Reduce render distance
         Camera.MaxDistance = 500
         Camera.CameraSubject = player.Character and player.Character:FindFirstChild("Humanoid")
     end
@@ -140,7 +319,6 @@ local function restoreOriginalSettings()
         Camera.MaxDistance = originalSettings.RenderingDistance
     end
     
-    -- Restore lighting
     Lighting.GlobalShadows = true
     Lighting.Brightness = 1
 end
@@ -161,7 +339,7 @@ local function togglePerformance()
     end
 end
 
--- Advanced Radar 2.0 System
+-- Advanced Radar 2.0 System (existing)
 local radarFrame, radarConnections = {}, {}
 local soundBillboards = {}
 
@@ -178,7 +356,6 @@ local function createAdvancedRadar()
     
     if not RadarEnabled then return end
     
-    -- Main radar frame
     radarFrame.main = Instance.new("Frame")
     radarFrame.main.Size = UDim2.new(0, 250, 0, 250)
     radarFrame.main.Position = UDim2.new(0, 10, 0, 10)
@@ -187,7 +364,6 @@ local function createAdvancedRadar()
     radarFrame.main.BorderSizePixel = 0
     radarFrame.main.Parent = player.PlayerGui:FindFirstChild("CoreGui") or player.PlayerGui
     
-    -- Radar border
     radarFrame.border = Instance.new("Frame")
     radarFrame.border.Size = UDim2.new(1, 0, 1, 0)
     radarFrame.border.BackgroundTransparency = 1
@@ -195,7 +371,6 @@ local function createAdvancedRadar()
     radarFrame.border.BorderSizePixel = 2
     radarFrame.border.Parent = radarFrame.main
     
-    -- Center point (player)
     radarFrame.center = Instance.new("Frame")
     radarFrame.center.Size = UDim2.new(0, 4, 0, 4)
     radarFrame.center.Position = UDim2.new(0.5, -2, 0.5, -2)
@@ -203,7 +378,6 @@ local function createAdvancedRadar()
     radarFrame.center.BorderSizePixel = 0
     radarFrame.center.Parent = radarFrame.main
     
-    -- Direction indicator
     radarFrame.direction = Instance.new("Frame")
     radarFrame.direction.Size = UDim2.new(0, 2, 0, 10)
     radarFrame.direction.Position = UDim2.new(0.5, -1, 0.5, -15)
@@ -211,7 +385,6 @@ local function createAdvancedRadar()
     radarFrame.direction.BorderSizePixel = 0
     radarFrame.direction.Parent = radarFrame.main
     
-    -- Sound visualization container
     radarFrame.sounds = Instance.new("Frame")
     radarFrame.sounds.Size = UDim2.new(1, 0, 1, 0)
     radarFrame.sounds.BackgroundTransparency = 1
@@ -221,7 +394,6 @@ end
 local function updateAdvancedRadar()
     if not RadarEnabled or not radarFrame.main then return end
     
-    -- Clear previous blips and sounds
     for _, child in pairs(radarFrame.main:GetChildren()) do
         if child:IsA("Frame") and child ~= radarFrame.border and child ~= radarFrame.center and child ~= radarFrame.direction and child ~= radarFrame.sounds then
             child:Destroy()
@@ -238,13 +410,11 @@ local function updateAdvancedRadar()
     local playerRoot = player.Character.HumanoidRootPart
     local playerCFrame = playerRoot.CFrame
     
-    -- Update direction indicator based on camera
     local camera = Workspace.CurrentCamera
     local lookVector = camera.CFrame.LookVector
     local angle = math.atan2(lookVector.X, lookVector.Z)
     radarFrame.direction.Rotation = math.deg(angle)
     
-    -- Add player blips
     for _, target in pairs(Players:GetPlayers()) do
         if target ~= player and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
             local root = target.Character.HumanoidRootPart
@@ -254,7 +424,6 @@ local function updateAdvancedRadar()
                 local relativePos = playerCFrame:PointToObjectSpace(root.Position)
                 local screenPos = Vector2.new(0.5 + relativePos.X / 100, 0.5 - relativePos.Z / 100)
                 
-                -- Only show if within radar bounds
                 if screenPos.X >= 0 and screenPos.X <= 1 and screenPos.Y >= 0 and screenPos.Y <= 1 then
                     local blip = Instance.new("Frame")
                     blip.Size = UDim2.new(0, 6, 0, 6)
@@ -263,7 +432,6 @@ local function updateAdvancedRadar()
                     blip.BorderSizePixel = 0
                     blip.Parent = radarFrame.main
                     
-                    -- Enemy FOV visualization
                     if ShowEnemyFOV and target.Team ~= player.Team then
                         local fovIndicator = Instance.new("Frame")
                         fovIndicator.Size = UDim2.new(0, 2, 0, 20)
@@ -279,9 +447,7 @@ local function updateAdvancedRadar()
         end
     end
     
-    -- Sound visualization
     if SoundVisualization then
-        -- Simulate sound detection (in real implementation, you'd hook into sound events)
         for _, part in pairs(Workspace:GetDescendants()) do
             if part:IsA("BasePart") and part.AssemblyLinearVelocity.Magnitude > 50 then
                 local relativePos = playerCFrame:PointToObjectSpace(part.Position)
@@ -302,9 +468,7 @@ local function updateAdvancedRadar()
         end
     end
     
-    -- Objective tracking (placeholder - would be game-specific)
     if ObjectiveTracker then
-        -- Example: Add objective markers
         local objectives = Workspace:FindFirstChild("Objectives") or Workspace:FindFirstChild("Flags") or Workspace:FindFirstChild("ControlPoints")
         if objectives then
             for _, objective in pairs(objectives:GetChildren()) do
@@ -326,12 +490,11 @@ local function updateAdvancedRadar()
     end
 end
 
--- Theme System
+-- Theme System (existing)
 local function applyTheme(themeName)
     CurrentTheme = themeName
     local theme = Themes[themeName]
     
-    -- Update radar colors if it exists
     if radarFrame.main and radarFrame.border then
         radarFrame.main.BackgroundColor3 = theme.Background
         radarFrame.border.BorderColor3 = theme.Primary
@@ -339,13 +502,10 @@ local function applyTheme(themeName)
         radarFrame.direction.BackgroundColor3 = theme.Primary
     end
     
-    -- Update ESP colors (you would update your ESP drawing colors here)
-    -- Update UI colors (WindUI might have its own theming system)
-    
     print("[.binh Hub] Applied theme: " .. themeName)
 end
 
--- ESP System (existing but will be enhanced with themes)
+-- ESP System (existing)
 local ESP = {
     Objects = {}
 }
@@ -378,7 +538,6 @@ function ESP:CreateESPPart(player)
     self.Objects[player] = drawing
 end
 
--- Rest of ESP functions remain the same as before...
 function ESP:RemoveESPPart(player)
     if self.Objects[player] then
         for _, drawing in pairs(self.Objects[player]) do
@@ -460,7 +619,7 @@ function ESP:Update()
     end
 end
 
--- Aimbot System (existing)
+-- Aimbot System (UPDATED with custom key support)
 local function getClosestPlayer()
     local closestPlayer, closestDistance = nil, AimDistance
     local mousePos = UserInputService:GetMouseLocation()
@@ -618,6 +777,13 @@ local function saveConfig()
     config.SoundVisualization = SoundVisualization
     config.ObjectiveTracker = ObjectiveTracker
     config.CurrentTheme = CurrentTheme
+    config.TeleportEnabled = TeleportEnabled
+    config.SavePositions = SavePositions
+    config.QuickTeleportKeys = QuickTeleportKeys
+    config.SpawnTeleport = SpawnTeleport
+    config.ObjectiveTeleport = ObjectiveTeleport
+    config.SafeSpotTeleport = SafeSpotTeleport
+    config.AimKey = AimKey
 
     writefile(CONFIG_FILE, HttpService:JSONEncode(config))
     print("[.binh Hub] Config saved!")
@@ -649,6 +815,13 @@ local function loadConfig()
         SoundVisualization = data.SoundVisualization or false
         ObjectiveTracker = data.ObjectiveTracker or false
         CurrentTheme = data.CurrentTheme or "Default"
+        TeleportEnabled = data.TeleportEnabled or false
+        SavePositions = data.SavePositions or false
+        QuickTeleportKeys = data.QuickTeleportKeys or false
+        SpawnTeleport = data.SpawnTeleport or false
+        ObjectiveTeleport = data.ObjectiveTeleport or false
+        SafeSpotTeleport = data.SafeSpotTeleport or false
+        AimKey = data.AimKey or Enum.UserInputType.MouseButton2
         print("[.binh Hub] Config loaded!")
     else
         print("[.binh Hub] No config file found!")
@@ -659,7 +832,20 @@ end
 RunService.RenderStepped:Connect(function()
     ESP:Update()
     
-    if AimEnabled and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+    -- UPDATED: Use custom aim key instead of hardcoded mouse button
+    local aimKeyPressed = false
+    if AimKey == Enum.UserInputType.MouseButton1 then
+        aimKeyPressed = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+    elseif AimKey == Enum.UserInputType.MouseButton2 then
+        aimKeyPressed = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+    elseif AimKey == Enum.UserInputType.MouseButton3 then
+        aimKeyPressed = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton3)
+    else
+        -- It's a keyboard key
+        aimKeyPressed = UserInputService:IsKeyDown(AimKey)
+    end
+    
+    if AimEnabled and aimKeyPressed then
         local target = getClosestPlayer()
         if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
             local targetPos = target.Character.HumanoidRootPart.Position
@@ -681,6 +867,12 @@ RunService.Heartbeat:Connect(function()
         radarFrame.main:Destroy()
         radarFrame = {}
     end
+end)
+
+-- Input listening for custom aim key
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    setAimKey(input)
 end)
 
 -- Create WindUI Window
@@ -715,13 +907,20 @@ ESPTab:Toggle({Title = "Team Check ESP", Desc = "Chỉ hiện người khác tea
 ESPTab:Toggle({Title = "Wall Check", Desc = "Ẩn người chơi bị che khuất", Default = ESPWallCheck, Callback = function(state) ESPWallCheck = state end})
 ESPTab:Slider({Title = "ESP Distance", Min = 50, Max = 500, Default = ESPDistance, Callback = function(value) ESPDistance = value end})
 
--- Aimbot Tab
+-- Aimbot Tab (UPDATED with custom key binding)
 local AimTab = Window:Tab({Title = "Aimbot", Icon = "target"})
 AimTab:Toggle({Title = "Enable AIM", Desc = "Aim vào đầu đối thủ", Default = AimEnabled, Callback = function(state) AimEnabled = state end})
 AimTab:Toggle({Title = "Team Check AIM", Desc = "Chỉ aim người khác team", Default = AimTeamCheck, Callback = function(state) AimTeamCheck = state end})
 AimTab:Toggle({Title = "Wall Check", Desc = "Không aim nếu đối thủ bị che khuất", Default = AimWallCheck, Callback = function(state) AimWallCheck = state end})
 AimTab:Slider({Title = "Aim Distance", Min = 50, Max = 500, Default = AimDistance, Callback = function(value) AimDistance = value end})
 AimTab:Slider({Title = "Smooth Strength", Min = 0.05, Max = 1, Default = SmoothStrength, Step = 0.01, Callback = function(value) SmoothStrength = value end})
+
+-- NEW: Custom Aimbot Key Button
+AimTab:Button({Title = "Aimbot Key: " .. getAimKeyName(), Desc = "Nhấn để đổi phím aimbot (chuột/ bàn phím)", Callback = function()
+    startAimKeyBinding()
+    -- Update button text to show we're waiting for input
+    -- Note: You might need to refresh the UI or use a different approach in WindUI
+end})
 
 -- Movement Tab
 local MoveTab = Window:Tab({Title = "Movement", Icon = "arrow-up-right"})
@@ -736,6 +935,84 @@ end})
 MoveTab:Toggle({Title = "Anti Fling", Desc = "Chống văng nhân vật bởi lực ngoài", Default = AntiFlingEnabled, Callback = function(state) 
     AntiFlingEnabled = state 
     toggleAntiFling()
+end})
+
+-- NEW: Teleport Tab
+local TeleportTab = Window:Tab({Title = "Teleport", Icon = "navigation"})
+TeleportTab:Toggle({Title = "Enable Teleport", Desc = "Kích hoạt hệ thống dịch chuyển", Default = TeleportEnabled, Callback = function(state) 
+    TeleportEnabled = state 
+    if state then
+        initTeleportSystem()
+    end
+end})
+TeleportTab:Toggle({Title = "Save Positions", Desc = "Cho phép lưu vị trí", Default = SavePositions, Callback = function(state) SavePositions = state end})
+TeleportTab:Toggle({Title = "Quick Teleport Keys", Desc = "F1-F4 để teleport nhanh", Default = QuickTeleportKeys, Callback = function(state) 
+    QuickTeleportKeys = state 
+    if state then
+        initTeleportSystem()
+    end
+end})
+TeleportTab:Toggle({Title = "Spawn Teleport", Desc = "Dịch chuyển đến spawn", Default = SpawnTeleport, Callback = function(state) SpawnTeleport = state end})
+TeleportTab:Toggle({Title = "Objective Teleport", Desc = "Dịch chuyển đến mục tiêu", Default = ObjectiveTeleport, Callback = function(state) ObjectiveTeleport = state end})
+TeleportTab:Toggle({Title = "Safe Spot Teleport", Desc = "Dịch chuyển đến vị trí an toàn", Default = SafeSpotTeleport, Callback = function(state) SafeSpotTeleport = state end})
+
+TeleportTab:Button({Title = "Save Position 1 (F1)", Desc = "Lưu vị trí hiện tại vào F1", Callback = function()
+    if SavePositions then
+        saveCurrentPosition("Position1")
+    else
+        print("[.binh Hub] Enable 'Save Positions' first!")
+    end
+end})
+
+TeleportTab:Button({Title = "Save Position 2 (F2)", Desc = "Lưu vị trí hiện tại vào F2", Callback = function()
+    if SavePositions then
+        saveCurrentPosition("Position2")
+    else
+        print("[.binh Hub] Enable 'Save Positions' first!")
+    end
+end})
+
+TeleportTab:Button({Title = "Save Position 3 (F3)", Desc = "Lưu vị trí hiện tại vào F3", Callback = function()
+    if SavePositions then
+        saveCurrentPosition("Position3")
+    else
+        print("[.binh Hub] Enable 'Save Positions' first!")
+    end
+end})
+
+TeleportTab:Button({Title = "Save Position 4 (F4)", Desc = "Lưu vị trí hiện tại vào F4", Callback = function()
+    if SavePositions then
+        saveCurrentPosition("Position4")
+    else
+        print("[.binh Hub] Enable 'Save Positions' first!")
+    end
+end})
+
+TeleportTab:Button({Title = "Teleport to Spawn", Desc = "Dịch chuyển đến spawn point", Callback = function()
+    if SpawnTeleport then
+        teleportToSpawn()
+    else
+        print("[.binh Hub] Enable 'Spawn Teleport' first!")
+    end
+end})
+
+TeleportTab:Button({Title = "Teleport to Objective", Desc = "Dịch chuyển đến mục tiêu", Callback = function()
+    if ObjectiveTeleport then
+        teleportToObjective()
+    else
+        print("[.binh Hub] Enable 'Objective Teleport' first!")
+    end
+end})
+
+TeleportTab:Button({Title = "Teleport to Safe Spot", Desc = "Dịch chuyển đến vị trí an toàn", Callback = function()
+    if SafeSpotTeleport then
+        local safeSpot = findSafeSpot()
+        if safeSpot then
+            teleportToPosition(safeSpot)
+        end
+    else
+        print("[.binh Hub] Enable 'Safe Spot Teleport' first!")
+    end
 end})
 
 -- Radar Tab
@@ -776,8 +1053,15 @@ player.CharacterAdded:Connect(function(character)
     if NoclipEnabled then toggleNoclip() end
     if AntiFlingEnabled then toggleAntiFling() end
     if PerformanceEnabled then togglePerformance() end
+    if TeleportEnabled then initTeleportSystem() end
 end)
 
 -- Apply default theme on startup
 applyTheme(CurrentTheme)
-print("[.binh Hub] Loaded successfully with Performance, Advanced Radar, and Theme System!")
+
+-- Initialize systems
+if TeleportEnabled then
+    initTeleportSystem()
+end
+
+print("[.binh Hub] Loaded successfully with Teleport System & Custom Aimbot Key!")
