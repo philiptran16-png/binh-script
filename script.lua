@@ -15,7 +15,7 @@ screenGui.Parent = player:WaitForChild("PlayerGui")
 
 -- Main Frame
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 360, 0, 500)
+frame.Size = UDim2.new(0, 380, 0, 520)
 frame.Position = UDim2.new(0, 30, 0, 30)
 frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 frame.BorderSizePixel = 0
@@ -46,20 +46,44 @@ title.Position = UDim2.new(0,0,0,0)
 title.BackgroundTransparency = 1
 title.Text = "Admin Panel Pro"
 title.Font = Enum.Font.GothamBold
-title.TextSize = 24
+title.TextSize = 26
 title.TextColor3 = Color3.fromRGB(255,255,255)
 title.Parent = frame
 
+-- Tooltip
+local tooltip = Instance.new("TextLabel")
+tooltip.Size = UDim2.new(0,200,0,30)
+tooltip.Position = UDim2.new(0,10,0,480)
+tooltip.BackgroundColor3 = Color3.fromRGB(0,0,0)
+tooltip.BackgroundTransparency = 0.6
+tooltip.TextColor3 = Color3.fromRGB(255,255,255)
+tooltip.Text = ""
+tooltip.TextXAlignment = Enum.TextXAlignment.Left
+tooltip.TextSize = 16
+tooltip.Font = Enum.Font.Gotham
+tooltip.Visible = false
+tooltip.Parent = frame
+
 -- ===== Helper Functions =====
-local function createToggle(text, y, default)
+local function createToggleWithIcon(text, y, iconText, default, tip)
     local container = Instance.new("Frame")
     container.Size = UDim2.new(1,-20,0,40)
     container.Position = UDim2.new(0,10,0,y)
     container.BackgroundTransparency = 1
     container.Parent = frame
 
+    local icon = Instance.new("TextLabel")
+    icon.Size = UDim2.new(0,30,1,0)
+    icon.BackgroundTransparency = 1
+    icon.Text = iconText
+    icon.Font = Enum.Font.GothamBold
+    icon.TextSize = 20
+    icon.TextColor3 = Color3.fromRGB(255,255,0)
+    icon.Parent = container
+
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0.7,0,1,0)
+    label.Size = UDim2.new(0.6,0,1,0)
+    label.Position = UDim2.new(0.1,0,0,0)
     label.BackgroundTransparency = 1
     label.Text = text
     label.Font = Enum.Font.GothamBold
@@ -73,7 +97,6 @@ local function createToggle(text, y, default)
     toggle.Position = UDim2.new(0.75,0,0.5,-12)
     toggle.BackgroundColor3 = default and Color3.fromRGB(0,200,0) or Color3.fromRGB(120,120,120)
     toggle.BorderSizePixel = 0
-    toggle.AnchorPoint = Vector2.new(0,0)
     toggle.Parent = container
 
     local circle = Instance.new("Frame")
@@ -81,9 +104,7 @@ local function createToggle(text, y, default)
     circle.Position = default and UDim2.new(1,-20,0.5,-10) or UDim2.new(0,0,0.5,-10)
     circle.BackgroundColor3 = Color3.fromRGB(255,255,255)
     circle.BorderSizePixel = 0
-    circle.AnchorPoint = Vector2.new(0,0)
     circle.Parent = toggle
-    circle.Name = "Circle"
 
     local toggleValue = default
 
@@ -97,10 +118,19 @@ local function createToggle(text, y, default)
         end
     end)
 
+    -- Tooltip
+    container.MouseEnter:Connect(function()
+        tooltip.Text = tip
+        tooltip.Visible = true
+    end)
+    container.MouseLeave:Connect(function()
+        tooltip.Visible = false
+    end)
+
     return container, function() return toggleValue end
 end
 
-local function createSlider(text, y, min,max,default)
+local function createSliderWithTooltip(text,y,min,max,default,tip)
     local container = Instance.new("Frame")
     container.Size = UDim2.new(1,-20,0,40)
     container.Position = UDim2.new(0,10,0,y)
@@ -146,106 +176,79 @@ local function createSlider(text, y, min,max,default)
         end
     end)
 
+    -- Tooltip
+    container.MouseEnter:Connect(function()
+        tooltip.Text = tip
+        tooltip.Visible = true
+    end)
+    container.MouseLeave:Connect(function()
+        tooltip.Visible = false
+    end)
+
     return container, function() return value end
 end
 
--- ===== Create Toggles =====
+-- ===== Create UI =====
 local y = 70
-local espToggle, getESP = createToggle("ESP",y,true); y = y + 50
-local teamCheckESPToggle, getTeamESP = createToggle("TeamCheck ESP",y,true); y = y + 50
-local aimToggle, getAim = createToggle("AIM",y,true); y = y + 50
-local teamCheckAimToggle, getTeamAim = createToggle("TeamCheck AIM",y,true); y = y + 50
-local wallCheckToggle, getWallCheck = createToggle("WallCheck",y,true); y = y + 50
-local flyToggle, getFly = createToggle("FLY",y,false); y = y + 50
-local noclipToggle, getNoclip = createToggle("Noclip",y,false); y = y + 50
+local espToggle, getESP = createToggleWithIcon("ESP",y,"👁️",true,"Hiển thị người chơi với Highlight"); y = y + 50
+local teamCheckESPToggle, getTeamESP = createToggleWithIcon("TeamCheck ESP",y,"🛡️",true,"Chỉ hiện người chơi khác team"); y = y + 50
+local aimToggle, getAim = createToggleWithIcon("AIM",y,"🎯",true,"Tự động aim vào đầu đối thủ"); y = y + 50
+local teamCheckAimToggle, getTeamAim = createToggleWithIcon("TeamCheck AIM",y,"🛡️",true,"Chỉ aim người khác team"); y = y + 50
+local wallCheckToggle, getWallCheck = createToggleWithIcon("WallCheck",y,"🧱",true,"Bỏ qua đối thủ bị che khuất tường"); y = y + 50
+local flyToggle, getFly = createToggleWithIcon("FLY",y,"🕊️",false,"Bay tự do WSAD + Space + Ctrl"); y = y + 50
+local noclipToggle, getNoclip = createToggleWithIcon("Noclip",y,"🚫",false,"Đi xuyên tường"); y = y + 50
+local aimDistanceSlider, getAimDistance = createSliderWithTooltip("Aim Distance",y,50,500,200,"Khoảng cách tối đa để aim vào đối thủ")
 
--- ===== Slider =====
-local aimDistanceSlider, getAimDistance = createSlider("Aim Distance",y,50,500,200); y = y + 60
-
--- ===== Flags =====
-local espEnabled = true
-local aimEnabled = true
-local flyEnabled = false
-local noclipEnabled = false
-local teamCheckESP = true
-local teamCheckAim = true
-local wallCheck = true
+-- ===== Flags & Main Loop =====
 local aimStrength = 0.25
-local aimDistance = 200
 
--- ===== Functions =====
-local function updateFlags()
-    espEnabled = getESP()
-    aimEnabled = getAim()
-    flyEnabled = getFly()
-    noclipEnabled = getNoclip()
-    teamCheckESP = getTeamESP()
-    teamCheckAim = getTeamAim()
-    wallCheck = getWallCheck()
-    aimDistance = getAimDistance()
-end
-
--- ===== Wall Check =====
-local function isVisible(part)
-    if not part then return false end
-    local origin = Camera.CFrame.Position
-    local direction = part.Position - origin
-    local rayParams = RaycastParams.new()
-    rayParams.FilterDescendantsInstances = {player.Character}
-    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-    local ray = Workspace:Raycast(origin,direction,rayParams)
-    if ray then
-        return ray.Instance:IsDescendantOf(part.Parent)
-    end
-    return true
-end
-
--- ===== ESP =====
-local function addESP(character, plr)
-    if character:FindFirstChild("Highlight") then return end
-    if teamCheckESP and plr.Team == player.Team then return end
-    if wallCheck and not isVisible(character:FindFirstChild("Head")) then return end
-    local hl = Instance.new("Highlight")
-    hl.Name = "Highlight"
-    hl.Parent = character
-    hl.FillColor = Color3.fromRGB(0,255,0)
-    hl.OutlineColor = Color3.fromRGB(255,255,255)
-    hl.FillTransparency = 0.5
-end
-
-local function removeESP(character)
-    local hl = character:FindFirstChild("Highlight")
-    if hl then hl:Destroy() end
-end
-
-local function updateESP()
-    updateFlags()
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr.Character then
-            if espEnabled then addESP(plr.Character,plr)
-            else removeESP(plr.Character) end
-        end
-    end
-end
-
--- ===== RenderStepped Loop =====
 RunService.RenderStepped:Connect(function()
-    updateFlags()
+    local espEnabled = getESP()
+    local aimEnabled = getAim()
+    local flyEnabled = getFly()
+    local noclipEnabled = getNoclip()
+    local teamCheckESP = getTeamESP()
+    local teamCheckAim = getTeamAim()
+    local wallCheck = getWallCheck()
+    local aimDistance = getAimDistance()
 
     -- ESP
-    if espEnabled then updateESP() end
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr.Character then
+            if espEnabled then
+                if plr ~= player then
+                    local head = plr.Character:FindFirstChild("Head")
+                    if head then
+                        if teamCheckESP and plr.Team == player.Team then continue end
+                        if wallCheck and not isVisible(head) then continue end
+                        if not plr.Character:FindFirstChild("Highlight") then
+                            local hl = Instance.new("Highlight")
+                            hl.Name = "Highlight"
+                            hl.Parent = plr.Character
+                            hl.FillColor = Color3.fromRGB(0,255,0)
+                            hl.OutlineColor = Color3.fromRGB(255,255,255)
+                            hl.FillTransparency = 0.5
+                        end
+                    end
+                end
+            else
+                local hl = plr.Character:FindFirstChild("Highlight")
+                if hl then hl:Destroy() end
+            end
+        end
+    end
 
-    -- Aim
+    -- Smooth Aim
     if aimEnabled then
         local nearestHead = nil
         local nearestDist = math.huge
-        for _,plr in pairs(Players:GetPlayers()) do
+        for _, plr in pairs(Players:GetPlayers()) do
             if plr ~= player and plr.Character and plr.Character:FindFirstChild("Head") then
-                if teamCheckAim and plr.Team == player.Team then continue end
                 local head = plr.Character.Head
                 local dist = (head.Position - Camera.CFrame.Position).Magnitude
-                if dist > aimDistance then continue end
+                if teamCheckAim and plr.Team == player.Team then continue end
                 if wallCheck and not isVisible(head) then continue end
+                if dist > aimDistance then continue end
                 if dist < nearestDist then
                     nearestDist = dist
                     nearestHead = head
