@@ -35,6 +35,8 @@ local NoclipEnabled = false
 
 local RadarEnabled = true
 
+local AntiFlingEnabled = true
+
 -- Config table
 local config = {
     ESPEnabled = ESPEnabled,
@@ -48,7 +50,8 @@ local config = {
     SmoothStrength = SmoothStrength,
     FlyEnabled = FlyEnabled,
     NoclipEnabled = NoclipEnabled,
-    RadarEnabled = RadarEnabled
+    RadarEnabled = RadarEnabled,
+    AntiFlingEnabled = AntiFlingEnabled
 }
 
 -- Helpers for Save/Load config
@@ -67,6 +70,7 @@ local function saveConfig()
     config.FlyEnabled = FlyEnabled
     config.NoclipEnabled = NoclipEnabled
     config.RadarEnabled = RadarEnabled
+    config.AntiFlingEnabled = AntiFlingEnabled
 
     writefile(CONFIG_FILE, HttpService:JSONEncode(config))
     print("[.binh Hub] Config saved!")
@@ -87,6 +91,7 @@ local function loadConfig()
         FlyEnabled = data.FlyEnabled
         NoclipEnabled = data.NoclipEnabled
         RadarEnabled = data.RadarEnabled
+        AntiFlingEnabled = data.AntiFlingEnabled
         print("[.binh Hub] Config loaded!")
     else
         print("[.binh Hub] No config file found!")
@@ -98,7 +103,7 @@ local Window = WindUI:CreateWindow({
     Title = ".binh Hub | WindUI",
     Author = "by .binh",
     Folder = "binh",
-    Icon = "https://github.com/philiptran16-png/binh-script/blob/main/Minimalistic%20and%20elegant%20_B_%20logo%2C%20monochrome%2C%20no%20colors%2C%20clean%20lines%2C%20modern%20design%2C%20geometric%20and%20balanced%2C%20high%20contrast%2C%20sharp%20edges%2C%20professional%20and%20sophisticated%2C%20suitable%20for%20branding%2C%20isolated%20on%20w.jpg",
+    Icon = "https://github.com/philiptran16-png/binh-script/blob/main/Minimalistic%20and%20elegant%20_B_%20logo%2C%20monochrome%2C%20no%20colors%2C%20clean%20lines%2C%20modern%20design%2C%20geometric%[...]
     IconSize = 44,
     NewElements = true,
     OpenButton = {
@@ -189,6 +194,12 @@ MoveTab:Toggle({
     Default = NoclipEnabled,
     Callback = function(state) NoclipEnabled = state end
 })
+MoveTab:Toggle({
+    Title = "Anti Fling",
+    Desc = "Chống văng nhân vật bởi lực ngoài",
+    Default = AntiFlingEnabled,
+    Callback = function(state) AntiFlingEnabled = state end
+})
 
 -- Radar Tab
 local RadarTab = Window:Tab({Title = "Radar", Icon = "map"})
@@ -221,10 +232,12 @@ end
 
 -- ESP setup: always working after respawn/death
 local function setupESP(plr)
-    plr.CharacterAdded:Connect(function(char)
-        char:WaitForChild("Head", 5)
-        RunService.RenderStepped:Connect(function()
-            local head = char:FindFirstChild("Head")
+    local function doESP(char)
+        local head = char:WaitForChild("Head", 5)
+        if not head then return end
+
+        local highlightConn
+        highlightConn = RunService.RenderStepped:Connect(function()
             if plr ~= player and head then
                 if ESPEnabled then
                     if ESPTeamCheck and plr.Team == player.Team then return end
@@ -243,7 +256,20 @@ local function setupESP(plr)
                 end
             end
         end)
-    end)
+
+        char.AncestryChanged:Connect(function(_, parent)
+            if not parent and highlightConn then
+                highlightConn:Disconnect()
+                highlightConn = nil
+            end
+        end)
+    end
+
+    if plr.Character then
+        doESP(plr.Character)
+    end
+
+    plr.CharacterAdded:Connect(doESP)
 end
 
 for _,plr in ipairs(Players:GetPlayers()) do
@@ -371,6 +397,21 @@ RunService.RenderStepped:Connect(function()
     if NoclipEnabled and player.Character then
         for _, part in pairs(player.Character:GetDescendants()) do
             if part:IsA("BasePart") then part.CanCollide = false end
+        end
+    end
+
+    -- Anti Fling
+    if AntiFlingEnabled and player.Character then
+        for _, part in pairs(player.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.Velocity = Vector3.new(0, 0, 0)
+                part.RotVelocity = Vector3.new(0, 0, 0)
+            end
+            if part:IsA("BodyVelocity") or part:IsA("BodyAngularVelocity")
+              or part:IsA("BodyForce") or part:IsA("BodyThrust")
+              or part:IsA("BodyPosition") or part:IsA("BodyGyro") then
+                part:Destroy()
+            end
         end
     end
 
