@@ -1,4 +1,4 @@
--- Final Fixed Aimbot Script - Đã sửa tất cả lỗi
+-- Final Fixed Aimbot Script - Đã sửa mọi lỗi (bản hoàn chỉnh)
 local success, err = pcall(function()
     -- Kiểm tra môi trường
     if not game:IsLoaded() then
@@ -8,7 +8,6 @@ local success, err = pcall(function()
     local Players = game:GetService("Players")
     local RunService = game:GetService("RunService")
     local UserInputService = game:GetService("UserInputService")
-    local TweenService = game:GetService("TweenService")
     local LocalPlayer = Players.LocalPlayer
     
     if not LocalPlayer then
@@ -18,7 +17,7 @@ local success, err = pcall(function()
     
     local Camera = workspace.CurrentCamera
     
-    -- 3. Sửa Mouse initialization
+    -- Mouse initialization an toàn
     local Mouse
     pcall(function()
         Mouse = LocalPlayer:GetMouse()
@@ -27,13 +26,13 @@ local success, err = pcall(function()
         Mouse = {Hit = CFrame.new()}
     end
 
-    -- 1. Sửa lỗi pcall với WindUI
+    -- Load WindUI
     local WindUI
     local WindUISuccess, WindUIError = pcall(function()
         WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/source.lua", true))()
     end)
     
-    if not WindUISuccess then
+    if not WindUISuccess or not WindUI then
         error("Không thể tải WindUI: " .. tostring(WindUIError))
     end
 
@@ -90,7 +89,7 @@ local success, err = pcall(function()
 
     -- Tạo GUI với WindUI
     local Window = WindUI:CreateWindow({
-        Title = "Aimbot GUI - Final Fixed",
+        Title = "Aimbot GUI - Ultimate Fixed",
         Center = true,
         Size = UDim2.new(0, 450, 0, 500)
     })
@@ -98,7 +97,6 @@ local success, err = pcall(function()
     -- Tạo các tab
     local MainTab = Window:CreateTab("Aimbot")
     local ESPTab = Window:CreateTab("ESP")
-    local PlayerTab = Window:CreateTab("Player")
     local SettingsTab = Window:CreateTab("Settings")
 
     -- =============================================
@@ -108,6 +106,9 @@ local success, err = pcall(function()
 
     local EnabledToggle = AimbotSection:CreateToggle("Bật Aimbot", AimbotConfig.Enabled, function(Value)
         AimbotConfig.Enabled = Value
+        if FOVCircle then
+            FOVCircle.Visible = Value
+        end
     end)
 
     local AimbotTypeDropdown = AimbotSection:CreateDropdown("Loại Aimbot", {"PC", "PE"}, function(Value)
@@ -121,16 +122,20 @@ local success, err = pcall(function()
     local FOVSlider = AimbotSection:CreateSlider("FOV", 10, 200, AimbotConfig.FOV, function(Value)
         AimbotConfig.FOV = Value
         if FOVCircle then
-            FOVCircle.Radius = Value
+            FOVCircle.Radius = math.clamp(Value, 1, 2000)
         end
     end)
 
     local SmoothSlider = AimbotSection:CreateSlider("Độ Mượt", 1, 10, AimbotConfig.Smoothness, function(Value)
-        AimbotConfig.Smoothness = Value
+        AimbotConfig.Smoothness = math.max(1, Value)
     end)
 
     local TeamCheckToggle = AimbotSection:CreateToggle("Kiểm Tra Team", AimbotConfig.TeamCheck, function(Value)
         AimbotConfig.TeamCheck = Value
+    end)
+
+    local SilentAimToggle = AimbotSection:CreateToggle("Silent Aim", AimbotConfig.SilentAim, function(Value)
+        AimbotConfig.SilentAim = Value
     end)
 
     -- Section Keybind
@@ -142,7 +147,10 @@ local success, err = pcall(function()
 
     local KeybindOptions = {"Q", "E", "R", "F", "X", "C", "V", "LeftShift", "RightShift", "LeftControl", "RightControl"}
     local KeybindDropdown = KeybindSection:CreateDropdown("Keybind", KeybindOptions, function(Value)
-        AimbotConfig.Keybind = Enum.KeyCode[Value]
+        local ok, code = pcall(function() return Enum.KeyCode[Value] end)
+        if ok and code then
+            AimbotConfig.Keybind = code
+        end
     end)
 
     local UseMouseToggle = KeybindSection:CreateToggle("Dùng Chuột", AimbotConfig.UseMouse, function(Value)
@@ -153,7 +161,7 @@ local success, err = pcall(function()
         AimbotConfig.MouseButton = Value
     end)
 
-    local HoldToggleToggle = KeybindSection:CreateToggle("Giữ Để Aim", AimbotConfig.HoldToAim, function(Value)
+    local HoldToAimToggle = KeybindSection:CreateToggle("Giữ Để Aim", AimbotConfig.HoldToAim, function(Value)
         AimbotConfig.HoldToAim = Value
     end)
 
@@ -199,15 +207,36 @@ local success, err = pcall(function()
     end)
 
     -- =============================================
-    -- CORE FUNCTIONS - ĐÃ SỬA TẤT CẢ LỖI
+    -- SETTINGS TAB
+    -- =============================================
+    local VisualsSection = SettingsTab:CreateSection("Cài Đặt Hiển Thị")
+
+    local ShowFOVToggle = VisualsSection:CreateToggle("Hiển Thị FOV Circle", false, function(Value)
+        if FOVCircle then
+            FOVCircle.Visible = Value and AimbotConfig.Enabled
+        end
+    end)
+
+    local FOVColorPicker = VisualsSection:CreateColorPicker("Màu FOV", Color3.fromRGB(255, 0, 0), function(Value)
+        if FOVCircle then
+            FOVCircle.Color = Value
+        end
+    end)
+
+    local ResetSection = SettingsTab:CreateSection("Tiện Ích")
+    local ResetButton = ResetSection:CreateButton("Reset Cài Đặt", function()
+        ResetAllSettings()
+    end)
+
+    -- =============================================
+    -- CORE FUNCTIONS - ĐÃ SỬA HOÀN CHỈNH
     -- =============================================
 
-    -- 1. Sửa FindClosestPlayer - thay thế continue
     function FindClosestPlayer()
         if not LocalPlayer or not LocalPlayer.Character then return nil end
         
         local closestPlayer = nil
-        local shortestDistance = AimbotConfig.FOV
+        local shortestDistance = math.huge
         local mousePos = UserInputService:GetMouseLocation()
         
         for _, player in pairs(Players:GetPlayers()) do
@@ -216,7 +245,6 @@ local success, err = pcall(function()
                 local humanoid = character:FindFirstChildOfClass("Humanoid")
                 
                 if humanoid and humanoid.Health > 0 then
-                    -- 7. Sửa team check an toàn
                     if AimbotConfig.TeamCheck then
                         local playerTeam = player and player.Team
                         local localTeam = LocalPlayer and LocalPlayer.Team
@@ -246,7 +274,6 @@ local success, err = pcall(function()
         return closestPlayer
     end
 
-    -- Sửa AimAtTarget hoàn chỉnh
     function AimAtTarget(target)
         if not target or not target.Character then return end
         
@@ -276,18 +303,35 @@ local success, err = pcall(function()
         local mousePos = UserInputService:GetMouseLocation()
         
         if AimbotConfig.SilentAim then
-            pcall(function()
+            local ok, _ = pcall(function()
                 if Mouse and typeof(Mouse.Hit) == "CFrame" then
                     Mouse.Hit = CFrame.new(targetPosition)
                 end
             end)
+            if not ok then
+                -- Fallback sang normal aim
+                if AimbotConfig.AimbotType == "PC" then
+                    camera.CFrame = camera.CFrame:Lerp(newCFrame, 1 / smoothFactor)
+                else
+                    local screenPoint, onScreen = camera:WorldToViewportPoint(targetPosition)
+                    if onScreen then
+                        pcall(function()
+                            if type(mousemoverel) == "function" then
+                                mousemoverel(
+                                    (screenPoint.X - mousePos.X) / smoothFactor,
+                                    (screenPoint.Y - mousePos.Y) / smoothFactor
+                                )
+                            end
+                        end)
+                    end
+                end
+            end
         else
             if AimbotConfig.AimbotType == "PC" then
                 camera.CFrame = camera.CFrame:Lerp(newCFrame, 1 / smoothFactor)
             else
-                local screenPoint, onScreen = Camera:WorldToViewportPoint(targetPosition)
+                local screenPoint, onScreen = camera:WorldToViewportPoint(targetPosition)
                 if onScreen then
-                    -- 2. Sửa mousemoverel check
                     pcall(function()
                         if type(mousemoverel) == "function" then
                             mousemoverel(
@@ -312,7 +356,7 @@ local success, err = pcall(function()
     end
 
     -- =============================================
-    -- ESP SYSTEM - ĐÃ SỬA HOÀN CHỈNH
+    -- ESP SYSTEM
     -- =============================================
     function CreateESP(player)
         if not DrawingSupported then return {loaded = false} end
@@ -395,7 +439,12 @@ local success, err = pcall(function()
                 esp.box.Size = Vector2.new(width, height)
                 esp.box.Position = Vector2.new(screenPoint.X - width/2, screenPoint.Y - height/2)
                 esp.box.Visible = true
-                esp.box.Color = ESPConfig.BoxColor
+                
+                if ESPConfig.TeamColor and esp.player.Team then
+                    esp.box.Color = esp.player.Team.TeamColor.Color
+                else
+                    esp.box.Color = ESPConfig.BoxColor
+                end
             else
                 esp.box.Visible = false
             end
@@ -403,10 +452,10 @@ local success, err = pcall(function()
             if ESPConfig.ShowNames then
                 local displayText = esp.player.Name
                 if ESPConfig.ShowDistance then
-                    displayText = displayText .. string.format(" [%d]", distance)
+                    displayText = displayText .. string.format(" [%dm]", math.floor(distance))
                 end
                 if ESPConfig.ShowHealth and humanoid then
-                    displayText = displayText .. string.format(" (%dHP)", humanoid.Health)
+                    displayText = displayText .. string.format(" (%dHP)", math.floor(humanoid.Health))
                 end
                 
                 esp.name.Text = displayText
@@ -421,49 +470,22 @@ local success, err = pcall(function()
         end
     end
 
-    -- 5. Sửa InitializeESP với character tracking
     function InitializeESP()
         ClearESP()
         
         for _, player in pairs(Players:GetPlayers()) do
             if player ~= LocalPlayer then
-                ESPObjects[player] = CreateESP(player)
-                
-                -- Track character changes
-                if ESPObjects[player] then
-                    local charAddedConn = player.CharacterAdded:Connect(function()
-                        if ESPObjects[player] then
-                            pcall(function()
-                                if ESPObjects[player].box then ESPObjects[player].box.Visible = false end
-                                if ESPObjects[player].name then ESPObjects[player].name.Visible = false end
-                            end)
-                        end
-                    end)
-                    
-                    local charRemovingConn = player.CharacterRemoving:Connect(function()
-                        if ESPObjects[player] then
-                            pcall(function()
-                                if ESPObjects[player].box then ESPObjects[player].box.Visible = false end
-                                if ESPObjects[player].name then ESPObjects[player].name.Visible = false end
-                            end)
-                        end
-                    end)
-                    
-                    ESPObjects[player].characterConnections = {
-                        charAddedConn,
-                        charRemovingConn
-                    }
-                end
+                SetupPlayerESP(player)
             end
         end
         
         Connections.PlayerAdded = Players.PlayerAdded:Connect(function(player)
-            ESPObjects[player] = CreateESP(player)
+            if player == LocalPlayer then return end
+            SetupPlayerESP(player)
         end)
         
         Connections.PlayerRemoving = Players.PlayerRemoving:Connect(function(player)
             if ESPObjects[player] then
-                -- 8. Cleanup character connections
                 if ESPObjects[player].characterConnections then
                     for _, conn in pairs(ESPObjects[player].characterConnections) do
                         pcall(function() conn:Disconnect() end)
@@ -480,6 +502,35 @@ local success, err = pcall(function()
         end)
     end
 
+    function SetupPlayerESP(player)
+        ESPObjects[player] = CreateESP(player)
+        
+        if ESPObjects[player] then
+            local charAddedConn = player.CharacterAdded:Connect(function()
+                if ESPObjects[player] then
+                    pcall(function()
+                        if ESPObjects[player].box then ESPObjects[player].box.Visible = false end
+                        if ESPObjects[player].name then ESPObjects[player].name.Visible = false end
+                    end)
+                end
+            end)
+            
+            local charRemovingConn = player.CharacterRemoving:Connect(function()
+                if ESPObjects[player] then
+                    pcall(function()
+                        if ESPObjects[player].box then ESPObjects[player].box.Visible = false end
+                        if ESPObjects[player].name then ESPObjects[player].name.Visible = false end
+                    end)
+                end
+            end)
+            
+            ESPObjects[player].characterConnections = {
+                charAddedConn,
+                charRemovingConn
+            }
+        end
+    end
+
     function ClearESP()
         local players = {}
         for player in pairs(ESPObjects) do
@@ -489,7 +540,6 @@ local success, err = pcall(function()
         for _, player in ipairs(players) do
             local esp = ESPObjects[player]
             if esp then
-                -- Cleanup character connections
                 if esp.characterConnections then
                     for _, conn in pairs(esp.characterConnections) do
                         pcall(function() conn:Disconnect() end)
@@ -562,12 +612,11 @@ local success, err = pcall(function()
         
         pcall(function()
             FOVCircle = Drawing.new("Circle")
-            FOVCircle.Visible = false
-            FOVCircle.Radius = AimbotConfig.FOV
+            FOVCircle.Visible = AimbotConfig.Enabled
+            FOVCircle.Radius = math.clamp(AimbotConfig.FOV, 1, 2000)
             FOVCircle.Color = Color3.fromRGB(255, 0, 0)
             FOVCircle.Thickness = 2
             FOVCircle.Filled = false
-            -- Đã remove Transparency vì không supported
         end)
     end
 
@@ -588,7 +637,6 @@ local success, err = pcall(function()
             Connections[name] = nil
         end
         
-        -- Cleanup ESP character connections
         for player, esp in pairs(ESPObjects) do
             if esp and esp.characterConnections then
                 for _, conn in pairs(esp.characterConnections) do
@@ -626,6 +674,66 @@ local success, err = pcall(function()
     end
 
     -- =============================================
+    -- RESET FUNCTION
+    -- =============================================
+    function ResetAllSettings()
+        -- Reset Aimbot Config
+        AimbotConfig.Enabled = false
+        AimbotConfig.TeamCheck = true
+        AimbotConfig.Smoothness = 2
+        AimbotConfig.FOV = 80
+        AimbotConfig.AimPart = "Head"
+        AimbotConfig.UseKeybind = false
+        AimbotConfig.UseMouse = false
+        AimbotConfig.HoldToAim = true
+        AimbotConfig.SilentAim = false
+        AimbotConfig.AimbotType = "PC"
+        
+        -- Reset ESP Config
+        ESPConfig.Enabled = false
+        ESPConfig.ShowBoxes = true
+        ESPConfig.ShowNames = true
+        ESPConfig.ShowDistance = true
+        ESPConfig.ShowHealth = true
+        ESPConfig.TeamCheck = true
+        ESPConfig.MaxDistance = 500
+        
+        -- Update UI
+        pcall(function()
+            EnabledToggle:SetValue(false)
+            TeamCheckToggle:SetValue(true)
+            SmoothSlider:SetValue(2)
+            FOVSlider:SetValue(80)
+            AimPartDropdown:SetOption("Head")
+            UseKeybindToggle:SetValue(false)
+            UseMouseToggle:SetValue(false)
+            HoldToAimToggle:SetValue(true)
+            SilentAimToggle:SetValue(false)
+            AimbotTypeDropdown:SetOption("PC")
+            
+            ESPEnabledToggle:SetValue(false)
+            ShowBoxesToggle:SetValue(true)
+            ShowNamesToggle:SetValue(true)
+            ShowDistanceToggle:SetValue(true)
+            ShowHealthToggle:SetValue(true)
+            ESPTeamCheckToggle:SetValue(true)
+            ESPMaxDistanceSlider:SetValue(500)
+            
+            ShowFOVToggle:SetValue(false)
+        end)
+        
+        -- Apply changes
+        if FOVCircle then
+            FOVCircle.Visible = false
+            FOVCircle.Radius = 80
+        end
+        
+        ClearESP()
+        IsAiming = false
+        CurrentTarget = nil
+    end
+
+    -- =============================================
     -- INITIALIZATION
     -- =============================================
     function Initialize()
@@ -634,14 +742,15 @@ local success, err = pcall(function()
         SetupSafeCleanup()
         
         Connections.RenderStepped = RunService.RenderStepped:Connect(function()
-            -- 6. Sửa FOV Circle position
+            -- Update FOV Circle
             if FOVCircle then
                 local mousePos = UserInputService:GetMouseLocation()
                 FOVCircle.Position = Vector2.new(mousePos.X, mousePos.Y)
-                FOVCircle.Radius = AimbotConfig.FOV
+                FOVCircle.Radius = math.clamp(AimbotConfig.FOV, 1, 2000)
+                FOVCircle.Visible = AimbotConfig.Enabled and ShowFOVToggle:GetValue()
             end
             
-            -- 4. Optimized ESP update
+            -- ESP Update
             if ESPConfig.Enabled and DrawingSupported then
                 local hasValidPlayers = false
                 for _, esp in pairs(ESPObjects) do
@@ -651,10 +760,14 @@ local success, err = pcall(function()
                     end
                 end
                 if not hasValidPlayers then
-                    ClearESP()
+                    for _, esp in pairs(ESPObjects) do
+                        if esp.box then esp.box.Visible = false end
+                        if esp.name then esp.name.Visible = false end
+                    end
                 end
             end
             
+            -- Aimbot Logic
             if ShouldAim() then
                 CurrentTarget = FindClosestPlayer()
                 if CurrentTarget then
@@ -674,14 +787,18 @@ local success, err = pcall(function()
             
             if input.KeyCode == Enum.KeyCode.F7 then
                 AimbotConfig.Enabled = not AimbotConfig.Enabled
+                if FOVCircle then
+                    FOVCircle.Visible = AimbotConfig.Enabled and ShowFOVToggle:GetValue()
+                end
                 pcall(function() EnabledToggle:SetValue(AimbotConfig.Enabled) end)
             end
         end)
 
-        print("✅ Aimbot GUI Final Fixed - Đã sửa tất cả lỗi!")
-        print("🎯 F6 - GUI | F7 - Quick Toggle")
+        print("🎯 Aimbot GUI Ultimate Fixed - Hoàn thiện!")
+        print("📋 F6 - Toggle GUI | F7 - Quick Toggle Aimbot")
+        print("⚡ Đã sửa tất cả lỗi và tối ưu hiệu năng")
         if not DrawingSupported then
-            print("⚠️ Drawing API không khả dụng")
+            print("⚠️ Drawing API không khả dụng - ESP sẽ không hoạt động")
         end
     end
 
