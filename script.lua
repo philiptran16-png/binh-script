@@ -1,5 +1,5 @@
--- Aimbot Script với WindUI GUI - Fixed Version
--- Lưu ý: Chỉ sử dụng cho mục đích giáo dục
+-- Aimbot + ESP - Fixed version (PC + PE separated)
+-- Ghi chú: Chỉ dùng cho mục đích học tập.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -7,26 +7,30 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
-local Mouse = LocalPlayer:GetMouse()
 
--- Kiểm tra an toàn trước khi load
 if not LocalPlayer then
     warn("Không thể tìm thấy LocalPlayer")
     return
 end
 
--- Tải WindUI Library với error handling
-local WindUI, WindUIError = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/source.lua"))()
-end)
-
-if not WindUI or WindUIError then
-    warn("Không thể tải WindUI: " .. tostring(WindUIError))
-    return
+-- ===== Load WindUI safely =====
+local WindUI
+do
+    local ok, lib = pcall(function()
+        local src = game:HttpGet or function() error("HttpGet not available") end
+        local s = src("https://raw.githubusercontent.com/Footagesus/WindUI/main/source.lua")
+        return loadstring(s)()
+    end)
+    if not ok then
+        warn("Không thể tải WindUI, đang dừng script. Lỗi: "..tostring(lib))
+        return
+    end
+    WindUI = lib
 end
 
--- Cấu hình Aimbot
+-- ===== Configs =====
 local AimbotConfig = {
+    Mode = "PC", -- "PC" or "PE" (mobile). Chuyển ở UI
     Enabled = false,
     TeamCheck = true,
     Smoothness = 2,
@@ -34,466 +38,411 @@ local AimbotConfig = {
     AimPart = "Head",
     UseKeybind = false,
     Keybind = Enum.KeyCode.Q,
-    UseMouse = false,
-    MouseButton = "RightButton",
+    UseMouse = true, -- PC mode: sử dụng chuột
     HoldToAim = true,
     SilentAim = false,
-    Prediction = 0.14
+    Prediction = 0.14,
+    AimStyle = "NormalAim" -- "NormalAim" or "SilentAim_Raycast"
 }
 
--- Cấu hình ESP
 local ESPConfig = {
     Enabled = false,
     ShowBoxes = true,
     ShowNames = true,
     ShowDistance = true,
     ShowHealth = true,
-    ShowTracers = false,
     TeamCheck = true,
     MaxDistance = 500,
-    BoxColor = Color3.fromRGB(255, 0, 0),
-    TextColor = Color3.fromRGB(255, 255, 255),
-    TeamColor = true
+    BoxColor = Color3.fromRGB(255,0,0),
+    TextColor = Color3.fromRGB(255,255,255)
 }
 
--- Cấu hình Player
 local PlayerConfig = {
     SpeedHack = false,
     SpeedMultiplier = 2,
     JumpPower = false,
     JumpMultiplier = 2,
     Noclip = false,
-    Fly = false,
-    FlySpeed = 2,
     InfiniteJump = false
 }
 
--- Biến toàn cục
+-- ===== Globals =====
 local CurrentTarget = nil
 local FOVCircle = nil
 local IsAiming = false
 local ESPObjects = {}
 local Connections = {}
+local DrawingAvailable = false
 
--- Tạo GUI với WindUI
+-- ===== Drawing fallback check =====
+do
+    local ok, drawing = pcall(function() return Drawing end)
+    if ok and drawing then
+        -- try create simple object to ensure allowed
+        local ok2, obj = pcall(function() return Drawing.new("Circle") end)
+        if ok2 then
+            pcall(function() obj:Remove() end)
+            DrawingAvailable = true
+        else
+            DrawingAvailable = false
+        end
+    else
+        DrawingAvailable = false
+    end
+end
+
+-- ===== WindUI Window & Tabs =====
 local Window = WindUI:CreateWindow({
-    Title = "Aimbot GUI - Fixed",
+    Title = "Aimbot GUI - Fixed (PC & PE)",
     Center = true,
-    Size = UDim2.new(0, 450, 0, 500)
+    Size = UDim2.new(0,460,0,520)
 })
-
--- Tạo các tab
 local MainTab = Window:CreateTab("Aimbot")
 local ESPTab = Window:CreateTab("ESP")
 local PlayerTab = Window:CreateTab("Player")
 local SettingsTab = Window:CreateTab("Settings")
 
--- =============================================
--- AIMBOT TAB
--- =============================================
-local AimbotSection = MainTab:CreateSection("Cấu Hình Aimbot")
+-- ===== Helper funcs =====
+local function SafeTeamCheck(p1, p2)
+    -- tránh nil team crash
+    if not p1 or not p2 then return false end
+    if not p1.Team or not p2.Team then return false end
+    return p1.Team == p2.Team
+end
 
-local EnabledToggle = AimbotSection:CreateToggle("Bật Aimbot", AimbotConfig.Enabled, function(Value)
-    AimbotConfig.Enabled = Value
-end)
-
-local AimPartDropdown = AimbotSection:CreateDropdown("Vị Trí Aim", {"Head", "Torso", "HumanoidRootPart"}, function(Value)
-    AimbotConfig.AimPart = Value
-end)
-
-local FOVSlider = AimbotSection:CreateSlider("FOV", 10, 200, AimbotConfig.FOV, function(Value)
-    AimbotConfig.FOV = Value
-end)
-
-local SmoothSlider = AimbotSection:CreateSlider("Độ Mượt", 1, 10, AimbotConfig.Smoothness, function(Value)
-    AimbotConfig.Smoothness = Value
-end)
-
-local TeamCheckToggle = AimbotSection:CreateToggle("Kiểm Tra Team", AimbotConfig.TeamCheck, function(Value)
-    AimbotConfig.TeamCheck = Value
-end)
-
--- Section Keybind
-local KeybindSection = MainTab:CreateSection("Cài Đặt Keybind")
-
-local UseKeybindToggle = KeybindSection:CreateToggle("Dùng Keybind", AimbotConfig.UseKeybind, function(Value)
-    AimbotConfig.UseKeybind = Value
-end)
-
-local KeybindOptions = {"Q", "E", "R", "F", "X", "C", "V", "LeftShift", "RightShift"}
-local KeybindDropdown = KeybindSection:CreateDropdown("Keybind", KeybindOptions, function(Value)
-    AimbotConfig.Keybind = Enum.KeyCode[Value]
-end)
-
-local UseMouseToggle = KeybindSection:CreateToggle("Dùng Chuột", AimbotConfig.UseMouse, function(Value)
-    AimbotConfig.UseMouse = Value
-end)
-
-local MouseDropdown = KeybindSection:CreateDropdown("Nút Chuột", {"LeftButton", "RightButton"}, function(Value)
-    AimbotConfig.MouseButton = Value
-end)
-
-local HoldToggleToggle = KeybindSection:CreateToggle("Giữ Để Aim", AimbotConfig.HoldToAim, function(Value)
-    AimbotConfig.HoldToAim = Value
-end)
-
--- =============================================
--- ESP TAB
--- =============================================
-local ESPMainSection = ESPTab:CreateSection("Cài Đặt ESP")
-
-local ESPEnabledToggle = ESPMainSection:CreateToggle("Bật ESP", ESPConfig.Enabled, function(Value)
-    ESPConfig.Enabled = Value
-    if Value then
-        InitializeESP()
+local function GetMouseEnum(btnName)
+    -- btnName "LeftButton" or "RightButton"
+    if btnName == "LeftButton" then
+        return Enum.UserInputType.MouseButton1
+    elseif btnName == "RightButton" then
+        return Enum.UserInputType.MouseButton2
     else
-        ClearESP()
+        return nil
     end
+end
+
+-- ===== UI: Aimbot tab =====
+local AimbotSection = MainTab:CreateSection("Aimbot")
+AimbotSection:CreateToggle("Bật Aimbot", AimbotConfig.Enabled, function(val) AimbotConfig.Enabled = val end)
+AimbotSection:CreateDropdown("Chế Độ (PC/PE)", {"PC","PE"}, function(val) AimbotConfig.Mode = val end)
+AimbotSection:CreateToggle("Kiểm Tra Team", AimbotConfig.TeamCheck, function(v) AimbotConfig.TeamCheck = v end)
+AimbotSection:CreateDropdown("Aim Part", {"Head","Torso","HumanoidRootPart"}, function(v) AimbotConfig.AimPart = v end)
+AimbotSection:CreateSlider("FOV", 10, 300, AimbotConfig.FOV, function(v) AimbotConfig.FOV = v end)
+AimbotSection:CreateSlider("Smoothness", 1, 20, AimbotConfig.Smoothness, function(v) AimbotConfig.Smoothness = v end)
+AimbotSection:CreateToggle("Silent Aim", AimbotConfig.SilentAim, function(v) AimbotConfig.SilentAim = v end)
+AimbotSection:CreateDropdown("Aim Style", {"NormalAim","SilentAim_Raycast"}, function(v) AimbotConfig.AimStyle = v end)
+
+-- Keybind & Mouse options (PC)
+local KeybindSection = MainTab:CreateSection("Input")
+KeybindSection:CreateToggle("Dùng Keybind", AimbotConfig.UseKeybind, function(v) AimbotConfig.UseKeybind = v end)
+local keyOptions = {"Q","E","R","F","X","C","V","LeftShift","RightShift"}
+KeybindSection:CreateDropdown("Keybind", keyOptions, function(val) 
+    local mapped = val
+    if mapped == "LeftShift" then mapped = "LeftShift" end
+    AimbotConfig.Keybind = Enum.KeyCode[val] or Enum.KeyCode.Q
+end)
+KeybindSection:CreateToggle("Dùng Chuột (PC)", AimbotConfig.UseMouse, function(v) AimbotConfig.UseMouse = v end)
+KeybindSection:CreateToggle("Hold To Aim", AimbotConfig.HoldToAim, function(v) AimbotConfig.HoldToAim = v end)
+
+-- ===== UI: ESP tab =====
+local ESPMain = ESPTab:CreateSection("ESP")
+ESPMain:CreateToggle("Bật ESP", ESPConfig.Enabled, function(v) 
+    ESPConfig.Enabled = v
+    if v then InitializeESP() else ClearESP() end
+end)
+ESPMain:CreateToggle("Hiển Thị Box", ESPConfig.ShowBoxes, function(v) ESPConfig.ShowBoxes = v end)
+ESPMain:CreateToggle("Hiển Thị Tên", ESPConfig.ShowNames, function(v) ESPConfig.ShowNames = v end)
+ESPMain:CreateSlider("Max Distance", 100, 2000, ESPConfig.MaxDistance, function(v) ESPConfig.MaxDistance = v end)
+
+-- ===== UI: Player tab =====
+local MovementSection = PlayerTab:CreateSection("Player")
+MovementSection:CreateToggle("Speed Hack", PlayerConfig.SpeedHack, function(v) PlayerConfig.SpeedHack = v UpdateSpeedHack() end)
+MovementSection:CreateSlider("Speed Multiplier", 1, 10, PlayerConfig.SpeedMultiplier, function(v) PlayerConfig.SpeedMultiplier = v UpdateSpeedHack() end)
+MovementSection:CreateToggle("Infinite Jump", PlayerConfig.InfiniteJump, function(v) PlayerConfig.InfiniteJump = v SetupInfiniteJump() end)
+
+-- ===== UI: Settings =====
+local Visuals = SettingsTab:CreateSection("Visual")
+Visuals:CreateToggle("Hiển Thị FOV Circle", false, function(v) if FOVCircle then FOVCircle.Visible = v end end)
+
+SettingsTab:CreateSection("Utilities"):CreateButton("Reset Settings", function()
+    -- đơn giản reset
+    AimbotConfig.Enabled = false
+    AimbotConfig.TeamCheck = true
+    AimbotConfig.Smoothness = 2
+    AimbotConfig.FOV = 80
+    AimbotConfig.AimPart = "Head"
+    AimbotConfig.UseKeybind = false
+    AimbotConfig.UseMouse = true
+    AimbotConfig.HoldToAim = true
+    ESPConfig.Enabled = false
+    ClearESP()
 end)
 
-local ShowBoxesToggle = ESPMainSection:CreateToggle("Hiển Thị Box", ESPConfig.ShowBoxes, function(Value)
-    ESPConfig.ShowBoxes = Value
-end)
-
-local ShowNamesToggle = ESPMainSection:CreateToggle("Hiển Thị Tên", ESPConfig.ShowNames, function(Value)
-    ESPConfig.ShowNames = Value
-end)
-
-local ShowDistanceToggle = ESPMainSection:CreateToggle("Hiển Thị Khoảng Cách", ESPConfig.ShowDistance, function(Value)
-    ESPConfig.ShowDistance = Value
-end)
-
-local ShowHealthToggle = ESPMainSection:CreateToggle("Hiển Thị Máu", ESPConfig.ShowHealth, function(Value)
-    ESPConfig.ShowHealth = Value
-end)
-
-local ESPTeamCheckToggle = ESPMainSection:CreateToggle("Kiểm Tra Team", ESPConfig.TeamCheck, function(Value)
-    ESPConfig.TeamCheck = Value
-end)
-
-local ESPMaxDistanceSlider = ESPMainSection:CreateSlider("Khoảng Cách Tối Đa", 100, 1000, ESPConfig.MaxDistance, function(Value)
-    ESPConfig.MaxDistance = Value
-end)
-
--- =============================================
--- PLAYER TAB
--- =============================================
-local MovementSection = PlayerTab:CreateSection("Di Chuyển")
-
-local SpeedHackToggle = MovementSection:CreateToggle("Speed Hack", PlayerConfig.SpeedHack, function(Value)
-    PlayerConfig.SpeedHack = Value
-    UpdateSpeedHack()
-end)
-
-local SpeedSlider = MovementSection:CreateSlider("Tốc Độ", 1, 5, PlayerConfig.SpeedMultiplier, function(Value)
-    PlayerConfig.SpeedMultiplier = Value
-    UpdateSpeedHack()
-end)
-
-local JumpPowerToggle = MovementSection:CreateToggle("Tăng Nhảy", PlayerConfig.JumpPower, function(Value)
-    PlayerConfig.JumpPower = Value
-    UpdateJumpPower()
-end)
-
-local JumpSlider = MovementSection:CreateSlider("Sức Nhảy", 1, 5, PlayerConfig.JumpMultiplier, function(Value)
-    PlayerConfig.JumpMultiplier = Value
-    UpdateJumpPower()
-end)
-
-local InfiniteJumpToggle = MovementSection:CreateToggle("Nhảy Vô Hạn", PlayerConfig.InfiniteJump, function(Value)
-    PlayerConfig.InfiniteJump = Value
-    SetupInfiniteJump()
-end)
-
-local NoclipToggle = MovementSection:CreateToggle("Noclip", PlayerConfig.Noclip, function(Value)
-    PlayerConfig.Noclip = Value
-    ToggleNoclip(Value)
-end)
-
--- =============================================
--- SETTINGS TAB
--- =============================================
-local VisualsSection = SettingsTab:CreateSection("Cài Đặt Giao Diện")
-
-local ShowFOVToggle = VisualsSection:CreateToggle("Hiển Thị FOV Circle", false, function(Value)
-    if FOVCircle then
-        FOVCircle.Visible = Value
-    end
-end)
-
-local FOVColorPicker = VisualsSection:CreateColorPicker("Màu FOV", Color3.fromRGB(255, 0, 0), function(Value)
-    if FOVCircle then
-        FOVCircle.Color = Value
-    end
-end)
-
-local ResetSection = SettingsTab:CreateSection("Tiện Ích")
-local ResetButton = ResetSection:CreateButton("Reset Cài Đặt", function()
-    ResetAllSettings()
-end)
-
--- =============================================
--- CORE FUNCTIONS
--- =============================================
-
--- Hàm tìm người chơi gần nhất
-function FindClosestPlayer()
-    if not LocalPlayer.Character then return nil end
-    
-    local closestPlayer = nil
-    local shortestDistance = AimbotConfig.FOV
+-- ===== FindClosestPlayer (opt) =====
+local function GetScreenDistanceToCursor(worldPos)
     local mousePos = UserInputService:GetMouseLocation()
-    
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character then
-            local character = player.Character
-            local humanoid = character:FindFirstChildOfClass("Humanoid")
-            
-            if humanoid and humanoid.Health > 0 then
-                -- Kiểm tra team
-                if AimbotConfig.TeamCheck then
-                    if player.Team and LocalPlayer.Team and player.Team == LocalPlayer.Team then
-                        continue
-                    end
-                end
-                
-                local aimPart = character:FindFirstChild(AimbotConfig.AimPart)
-                if aimPart then
-                    local screenPoint, onScreen = Camera:WorldToViewportPoint(aimPart.Position)
-                    
-                    if onScreen then
-                        local distance = (Vector2.new(mousePos.X, mousePos.Y) - Vector2.new(screenPoint.X, screenPoint.Y)).Magnitude
-                        
-                        if distance < shortestDistance then
-                            shortestDistance = distance
-                            closestPlayer = player
+    local screenPoint, onScreen = Camera:WorldToViewportPoint(worldPos)
+    if not onScreen then return math.huge, screenPoint end
+    return (Vector2.new(mousePos.X, mousePos.Y) - Vector2.new(screenPoint.X, screenPoint.Y)).Magnitude, screenPoint
+end
+
+local function FindClosestPlayer()
+    if not LocalPlayer.Character then return nil end
+    local shortest = AimbotConfig.FOV
+    local chosen = nil
+    for _, pl in pairs(Players:GetPlayers()) do
+        if pl ~= LocalPlayer and pl.Character and pl.Character.Parent then
+            local hum = pl.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                if AimbotConfig.TeamCheck and SafeTeamCheck(pl, LocalPlayer) then
+                    -- same team -> skip
+                else
+                    local part = pl.Character:FindFirstChild(AimbotConfig.AimPart) or pl.Character:FindFirstChild("HumanoidRootPart")
+                    if part then
+                        local dist, screen = GetScreenDistanceToCursor(part.Position)
+                        if dist < shortest then
+                            shortest = dist
+                            chosen = pl
                         end
                     end
                 end
             end
         end
     end
-    
-    return closestPlayer
+    return chosen
 end
 
--- Hàm aim tại target
-function AimAtTarget(target)
+-- ===== Aiming implementations =====
+local function AimAtTarget_PC_Normal(target)
     if not target or not target.Character then return end
-    
-    local aimPart = target.Character:FindFirstChild(AimbotConfig.AimPart)
+    local aimPart = target.Character:FindFirstChild(AimbotConfig.AimPart) or target.Character:FindFirstChild("HumanoidRootPart")
     if not aimPart then return end
-    
-    local camera = workspace.CurrentCamera
-    local targetPosition = aimPart.Position
-    
-    -- Tính prediction nếu cần
+    local targetPos = aimPart.Position
     if AimbotConfig.Prediction > 0 then
-        local humanoidRootPart = target.Character:FindFirstChild("HumanoidRootPart")
-        if humanoidRootPart then
-            targetPosition = targetPosition + (humanoidRootPart.Velocity * AimbotConfig.Prediction)
-        end
+        local hrp = target.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then targetPos = targetPos + hrp.Velocity * AimbotConfig.Prediction end
     end
-    
-    local screenPoint = camera:WorldToScreenPoint(targetPosition)
-    
-    if screenPoint then
-        local currentCameraPos = camera.CFrame.Position
-        local direction = (targetPosition - currentCameraPos).Unit
-        
-        -- Tính toán smooth aiming
-        local smoothFactor = math.max(1, AimbotConfig.Smoothness)
-        local newCFrame = CFrame.new(currentCameraPos, currentCameraPos + direction)
-        
-        if AimbotConfig.SilentAim then
-            -- Silent Aim
-            Mouse.Hit = newCFrame
+    local camPos = Camera.CFrame.Position
+    local dir = (targetPos - camPos).Unit
+    local newCFrame = CFrame.new(camPos, camPos + dir)
+    local smoothFactor = math.clamp(1 / math.max(0.0001, AimbotConfig.Smoothness), 0, 1)
+    Camera.CFrame = Camera.CFrame:Lerp(newCFrame, smoothFactor)
+end
+
+-- Silent attempt: simulate bullet direction via raycast before shooting
+local function AimAtTarget_PC_Silent(target)
+    -- This does NOT guarantee working on all executors; it's a best-effort raycast direction helper.
+    -- Implementation: compute aim direction and store for use by fire hook (not provided).
+    -- Here we will set Mouse.Hit if possible (pcall) else fallback to lerp camera.
+    local ok, res = pcall(function()
+        local aimPart = target.Character:FindFirstChild(AimbotConfig.AimPart) or target.Character:FindFirstChild("HumanoidRootPart")
+        if not aimPart then return false end
+        local targetPos = aimPart.Position
+        if AimbotConfig.Prediction > 0 then
+            local hrp = target.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then targetPos = targetPos + hrp.Velocity * AimbotConfig.Prediction end
+        end
+        local camPos = Camera.CFrame.Position
+        local dir = (targetPos - camPos).Unit
+        local newCFrame = CFrame.new(camPos, camPos + dir)
+        if mouse and mouse.Hit then
+            mouse.Hit = newCFrame
+            return true
         else
-            -- Normal Aim với smoothness
-            camera.CFrame = camera.CFrame:Lerp(newCFrame, 1 / smoothFactor)
+            -- fallback to normal
+            Camera.CFrame = Camera.CFrame:Lerp(newCFrame, math.clamp(1 / math.max(0.0001, AimbotConfig.Smoothness),0,1))
+            return false
+        end
+    end)
+    return ok and res
+end
+
+-- Mobile (PE) aim: move camera directly to look at target (touch usage)
+local function AimAtTarget_PE(target)
+    if not target or not target.Character then return end
+    local aimPart = target.Character:FindFirstChild(AimbotConfig.AimPart) or target.Character:FindFirstChild("HumanoidRootPart")
+    if not aimPart then return end
+    local targetPos = aimPart.Position
+    if AimbotConfig.Prediction > 0 then
+        local hrp = target.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then targetPos = targetPos + hrp.Velocity * AimbotConfig.Prediction end
+    end
+    local camPos = Camera.CFrame.Position
+    local dir = (targetPos - camPos).Unit
+    local newCFrame = CFrame.new(camPos, camPos + dir)
+    Camera.CFrame = Camera.CFrame:Lerp(newCFrame, math.clamp(1 / math.max(0.0001, AimbotConfig.Smoothness),0,1))
+end
+
+-- Dispatcher
+local function AimAtTarget(target)
+    if not target then return end
+    if AimbotConfig.Mode == "PE" then
+        AimAtTarget_PE(target)
+    else
+        if AimbotConfig.SilentAim and AimbotConfig.AimStyle == "SilentAim_Raycast" then
+            local ok = AimAtTarget_PC_Silent(target)
+            if not ok then AimAtTarget_PC_Normal(target) end
+        else
+            AimAtTarget_PC_Normal(target)
         end
     end
 end
 
--- Hàm kiểm tra điều kiện aim
-function ShouldAim()
+-- ===== ShouldAim =====
+local function ShouldAim()
     if not AimbotConfig.Enabled then return false end
-    
-    -- Nếu không sử dụng keybind/mouse, luôn aim khi enabled
+    if AimbotConfig.Mode == "PE" then
+        return true -- on mobile just enable when Enabled (touch behavior can be refined by user)
+    end
     if not AimbotConfig.UseKeybind and not AimbotConfig.UseMouse then
         return true
     end
-    
     return IsAiming
 end
 
--- =============================================
--- ESP SYSTEM (Đơn giản hóa)
--- =============================================
-function CreateESP(player)
-    local esp = {
-        player = player,
-        box = Drawing.new("Square"),
-        name = Drawing.new("Text"),
-        loaded = false
-    }
-    
-    -- Cấu hình box
-    esp.box.Visible = false
-    esp.box.Color = ESPConfig.BoxColor
-    esp.box.Thickness = 2
-    esp.box.Filled = false
-    
-    -- Cấu hình name
-    esp.name.Visible = false
-    esp.name.Color = ESPConfig.TextColor
-    esp.name.Size = 13
-    esp.name.Center = true
-    esp.name.Outline = true
-    esp.name.Text = player.Name
-    
-    esp.loaded = true
+-- ===== ESP system with Drawing fallback =====
+local function CreateESPObject(player)
+    local esp = {player = player}
+    if DrawingAvailable then
+        esp.box = Drawing.new("Square")
+        esp.name = Drawing.new("Text")
+        esp.box.Visible = false
+        esp.box.Filled = false
+        esp.box.Thickness = 2
+        esp.box.Color = ESPConfig.BoxColor
+        esp.name.Visible = false
+        esp.name.Center = true
+        esp.name.Outline = true
+        esp.name.Size = 13
+        esp.name.Color = ESPConfig.TextColor
+    else
+        -- Fallback: BillboardGui approach
+        local holder = Instance.new("BillboardGui")
+        holder.Name = "ESP_BB"
+        holder.Size = UDim2.new(0,100,0,50)
+        holder.AlwaysOnTop = true
+        local txt = Instance.new("TextLabel", holder)
+        txt.BackgroundTransparency = 1
+        txt.Size = UDim2.new(1,0,1,0)
+        txt.TextScaled = true
+        txt.TextStrokeTransparency = 0
+        txt.TextColor3 = ESPConfig.TextColor
+        txt.Text = player.Name
+        esp.bb = holder
+        esp.bbLabel = txt
+    end
     return esp
 end
 
-function UpdateESP(esp)
-    if not esp.loaded or not esp.player or not esp.player.Character then
-        esp.box.Visible = false
-        esp.name.Visible = false
+local function UpdateESPObject(esp)
+    local p = esp.player
+    if not p or not p.Character or not p.Character.Parent then
+        if esp.box then esp.box.Visible = false end
+        if esp.name then esp.name.Visible = false end
+        if esp.bb then esp.bb.Parent = nil end
         return
     end
-    
-    local character = esp.player.Character
-    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    
-    if not humanoidRootPart or not humanoid or humanoid.Health <= 0 then
-        esp.box.Visible = false
-        esp.name.Visible = false
+    local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+    local hum = p.Character:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum or hum.Health <= 0 then
+        if esp.box then esp.box.Visible = false end
+        if esp.name then esp.name.Visible = false end
+        if esp.bb then esp.bb.Parent = nil end
         return
     end
-    
-    -- Kiểm tra khoảng cách
-    local distance = (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")) 
-        and (humanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude 
-        or 9999
-    
+
+    local distance = (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")) and
+        (hrp.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude or 9999
     if distance > ESPConfig.MaxDistance then
-        esp.box.Visible = false
-        esp.name.Visible = false
+        if esp.box then esp.box.Visible = false end
+        if esp.name then esp.name.Visible = false end
+        if esp.bb then esp.bb.Parent = nil end
         return
     end
-    
-    -- Kiểm tra team
-    if ESPConfig.TeamCheck and esp.player.Team and LocalPlayer.Team and esp.player.Team == LocalPlayer.Team then
-        esp.box.Visible = false
-        esp.name.Visible = false
+    if ESPConfig.TeamCheck and SafeTeamCheck(p, LocalPlayer) then
+        if esp.box then esp.box.Visible = false end
+        if esp.name then esp.name.Visible = false end
+        if esp.bb then esp.bb.Parent = nil end
         return
     end
-    
-    local screenPoint, onScreen = Camera:WorldToViewportPoint(humanoidRootPart.Position)
-    
-    if onScreen then
-        -- Tính toán kích thước box
+
+    local screenPoint, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+    if not onScreen then
+        if esp.box then esp.box.Visible = false end
+        if esp.name then esp.name.Visible = false end
+        if esp.bb then esp.bb.Parent = nil end
+        return
+    end
+
+    if DrawingAvailable and esp.box and esp.name then
         local scaleFactor = 1000 / screenPoint.Z
-        local width = 100 / scaleFactor
-        local height = 150 / scaleFactor
-        
-        -- Cập nhật box
+        local width = math.clamp(100/scaleFactor, 10, 200)
+        local height = math.clamp(150/scaleFactor, 10, 300)
         if ESPConfig.ShowBoxes then
             esp.box.Size = Vector2.new(width, height)
             esp.box.Position = Vector2.new(screenPoint.X - width/2, screenPoint.Y - height/2)
             esp.box.Visible = true
-            esp.box.Color = ESPConfig.BoxColor
         else
             esp.box.Visible = false
         end
-        
-        -- Cập nhật name
         if ESPConfig.ShowNames then
-            local displayText = esp.player.Name
-            if ESPConfig.ShowDistance then
-                displayText = displayText .. string.format(" [%d]", distance)
-            end
-            if ESPConfig.ShowHealth and humanoid then
-                displayText = displayText .. string.format(" (%dHP)", humanoid.Health)
-            end
-            
-            esp.name.Text = displayText
+            local display = p.Name
+            if ESPConfig.ShowDistance then display = display.." ["..tostring(math.floor(distance)).."]" end
+            if ESPConfig.ShowHealth and hum then display = display.." ("..tostring(math.floor(hum.Health)).."HP)" end
+            esp.name.Text = display
             esp.name.Position = Vector2.new(screenPoint.X, screenPoint.Y - height/2 - 20)
             esp.name.Visible = true
         else
             esp.name.Visible = false
         end
-    else
-        esp.box.Visible = false
-        esp.name.Visible = false
+    elseif esp.bb then
+        esp.bb.Adornee = hrp
+        esp.bb.Parent = workspace:FindFirstChildOfClass("WorldModel") or game.CoreGui
+        local display = p.Name
+        if ESPConfig.ShowDistance then display = display.." ["..tostring(math.floor(distance)).."]" end
+        if ESPConfig.ShowHealth and hum then display = display.." ("..tostring(math.floor(hum.Health)).."HP)" end
+        esp.bbLabel.Text = display
     end
 end
 
 function InitializeESP()
     ClearESP()
-    
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            ESPObjects[player] = CreateESP(player)
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            ESPObjects[p] = CreateESPObject(p)
         end
     end
-    
-    -- Kết nối sự kiện
-    Connections.PlayerAdded = Players.PlayerAdded:Connect(function(player)
-        ESPObjects[player] = CreateESP(player)
+    Connections.PlayerAdded = Players.PlayerAdded:Connect(function(p)
+        if p ~= LocalPlayer then ESPObjects[p] = CreateESPObject(p) end
     end)
-    
-    Connections.PlayerRemoving = Players.PlayerRemoving:Connect(function(player)
-        if ESPObjects[player] then
-            if ESPObjects[player].box then
-                ESPObjects[player].box:Remove()
-            end
-            if ESPObjects[player].name then
-                ESPObjects[player].name:Remove()
-            end
-            ESPObjects[player] = nil
+    Connections.PlayerRemoving = Players.PlayerRemoving:Connect(function(p)
+        if ESPObjects[p] then
+            if ESPObjects[p].box then pcall(function() ESPObjects[p].box:Remove() end) end
+            if ESPObjects[p].name then pcall(function() ESPObjects[p].name:Remove() end) end
+            if ESPObjects[p].bb then pcall(function() ESPObjects[p].bb:Destroy() end) end
+            ESPObjects[p] = nil
         end
     end)
 end
 
 function ClearESP()
-    for player, esp in pairs(ESPObjects) do
-        if esp.box then
-            esp.box:Remove()
-        end
-        if esp.name then
-            esp.name:Remove()
-        end
+    for p, e in pairs(ESPObjects) do
+        if e.box then pcall(function() e.box:Remove() end) end
+        if e.name then pcall(function() e.name:Remove() end) end
+        if e.bb then pcall(function() e.bb:Destroy() end) end
     end
     ESPObjects = {}
 end
 
--- =============================================
--- PLAYER FUNCTIONS
--- =============================================
+-- ===== Player functions =====
 function UpdateSpeedHack()
     if LocalPlayer.Character then
-        local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
+        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
             if PlayerConfig.SpeedHack then
-                humanoid.WalkSpeed = 16 * PlayerConfig.SpeedMultiplier
+                hum.WalkSpeed = 16 * (PlayerConfig.SpeedMultiplier or 1)
             else
-                humanoid.WalkSpeed = 16
-            end
-        end
-    end
-end
-
-function UpdateJumpPower()
-    if LocalPlayer.Character then
-        local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            if PlayerConfig.JumpPower then
-                humanoid.JumpPower = 50 * PlayerConfig.JumpMultiplier
-            else
-                humanoid.JumpPower = 50
+                hum.WalkSpeed = 16
             end
         end
     end
@@ -501,24 +450,22 @@ end
 
 function SetupInfiniteJump()
     if PlayerConfig.InfiniteJump then
-        Connections.InfiniteJump = UserInputService.JumpRequest:Connect(function()
-            if PlayerConfig.InfiniteJump and LocalPlayer.Character then
-                local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                if humanoid then
-                    humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        if not Connections.InfiniteJump then
+            Connections.InfiniteJump = UserInputService.JumpRequest:Connect(function()
+                if PlayerConfig.InfiniteJump and LocalPlayer.Character then
+                    local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                    if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
                 end
-            end
-        end)
-    else
-        if Connections.InfiniteJump then
-            Connections.InfiniteJump:Disconnect()
-            Connections.InfiniteJump = nil
+            end)
         end
+    else
+        if Connections.InfiniteJump then Connections.InfiniteJump:Disconnect() Connections.InfiniteJump = nil end
     end
 end
 
 function ToggleNoclip(value)
     if value then
+        if Connections.Noclip then return end
         Connections.Noclip = RunService.Stepped:Connect(function()
             if LocalPlayer.Character then
                 for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
@@ -529,163 +476,100 @@ function ToggleNoclip(value)
             end
         end)
     else
-        if Connections.Noclip then
-            Connections.Noclip:Disconnect()
-            Connections.Noclip = nil
-        end
+        if Connections.Noclip then Connections.Noclip:Disconnect() Connections.Noclip = nil end
     end
 end
 
--- =============================================
--- INPUT HANDLING
--- =============================================
+-- ===== Input handling (safe) =====
+local mouse = nil
+pcall(function() mouse = LocalPlayer:GetMouse() end)
+
 function SetupInputHandling()
-    -- Keybind input
-    Connections.KeybindBegan = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
-        
+    -- InputBegan
+    if Connections.InputBegan then Connections.InputBegan:Disconnect() Connections.InputBegan = nil end
+    Connections.InputBegan = UserInputService.InputBegan:Connect(function(input, gp)
+        if gp then return end
+        -- GUI toggle
+        if input.KeyCode == Enum.KeyCode.F6 then Window:Toggle() end
+        if input.KeyCode == Enum.KeyCode.F7 then
+            AimbotConfig.Enabled = not AimbotConfig.Enabled
+            -- no UI binding setter here
+        end
+
+        -- Keybind toggle
         if AimbotConfig.UseKeybind and input.KeyCode == AimbotConfig.Keybind then
-            if AimbotConfig.HoldToAim then
-                IsAiming = true
-            else
-                IsAiming = not IsAiming
+            if AimbotConfig.HoldToAim then IsAiming = true else IsAiming = not IsAiming end
+        end
+
+        -- Mouse input (PC)
+        if AimbotConfig.Mode == "PC" and AimbotConfig.UseMouse then
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseButton2 then
+                if AimbotConfig.HoldToAim then IsAiming = true else IsAiming = not IsAiming end
             end
         end
-        
-        -- Mouse input
-        if AimbotConfig.UseMouse then
-            local mouseButton = Enum.UserInputType[("MouseButton" .. AimbotConfig.MouseButton:gsub("Button", ""))]
-            if input.UserInputType == mouseButton then
-                if AimbotConfig.HoldToAim then
-                    IsAiming = true
-                else
-                    IsAiming = not IsAiming
-                end
-            end
-        end
+
+        -- Mobile touch could be captured if needed (placeholder)
     end)
-    
-    Connections.KeybindEnded = UserInputService.InputEnded:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
-        
+
+    -- InputEnded
+    if Connections.InputEnded then Connections.InputEnded:Disconnect() Connections.InputEnded = nil end
+    Connections.InputEnded = UserInputService.InputEnded:Connect(function(input, gp)
+        if gp then return end
         if AimbotConfig.UseKeybind and input.KeyCode == AimbotConfig.Keybind and AimbotConfig.HoldToAim then
             IsAiming = false
         end
-        
-        if AimbotConfig.UseMouse and AimbotConfig.HoldToAim then
-            local mouseButton = Enum.UserInputType[("MouseButton" .. AimbotConfig.MouseButton:gsub("Button", ""))]
-            if input.UserInputType == mouseButton then
+        if AimbotConfig.Mode == "PC" and AimbotConfig.UseMouse and AimbotConfig.HoldToAim then
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseButton2 then
                 IsAiming = false
             end
         end
     end)
 end
 
--- =============================================
--- FOV CIRCLE
--- =============================================
+-- ===== FOV Circle =====
 function CreateFOVCircle()
     if FOVCircle then return end
-    
-    FOVCircle = Drawing.new("Circle")
-    FOVCircle.Visible = false
-    FOVCircle.Radius = AimbotConfig.FOV
-    FOVCircle.Color = Color3.fromRGB(255, 0, 0)
-    FOVCircle.Thickness = 2
-    FOVCircle.Filled = false
-    FOVCircle.Transparency = 1
+    if DrawingAvailable then
+        local ok, c = pcall(function()
+            local circ = Drawing.new("Circle")
+            circ.Visible = false
+            circ.Radius = AimbotConfig.FOV
+            circ.Thickness = 2
+            circ.Filled = false
+            circ.Transparency = 1
+            circ.Color = Color3.fromRGB(255,0,0)
+            return circ
+        end)
+        if ok then FOVCircle = c end
+    else
+        -- fallback: none (mobile/GUI optional)
+        FOVCircle = nil
+    end
 end
 
--- =============================================
--- RESET FUNCTIONS
--- =============================================
-function ResetAllSettings()
-    -- Reset Aimbot
-    AimbotConfig.Enabled = false
-    AimbotConfig.TeamCheck = true
-    AimbotConfig.Smoothness = 2
-    AimbotConfig.FOV = 80
-    AimbotConfig.AimPart = "Head"
-    AimbotConfig.UseKeybind = false
-    AimbotConfig.UseMouse = false
-    AimbotConfig.HoldToAim = true
-    
-    -- Reset ESP
-    ESPConfig.Enabled = false
-    ESPConfig.ShowBoxes = true
-    ESPConfig.ShowNames = true
-    ESPConfig.ShowDistance = true
-    ESPConfig.ShowHealth = true
-    ESPConfig.TeamCheck = true
-    ESPConfig.MaxDistance = 500
-    
-    -- Reset Player
-    PlayerConfig.SpeedHack = false
-    PlayerConfig.SpeedMultiplier = 2
-    PlayerConfig.JumpPower = false
-    PlayerConfig.JumpMultiplier = 2
-    PlayerConfig.Noclip = false
-    PlayerConfig.Fly = false
-    PlayerConfig.InfiniteJump = false
-    
-    -- Update UI
-    EnabledToggle:SetValue(false)
-    TeamCheckToggle:SetValue(true)
-    SmoothSlider:SetValue(2)
-    FOVSlider:SetValue(80)
-    AimPartDropdown:SetOption("Head")
-    UseKeybindToggle:SetValue(false)
-    UseMouseToggle:SetValue(false)
-    HoldToggleToggle:SetValue(true)
-    
-    ESPEnabledToggle:SetValue(false)
-    ShowBoxesToggle:SetValue(true)
-    ShowNamesToggle:SetValue(true)
-    ShowDistanceToggle:SetValue(true)
-    ShowHealthToggle:SetValue(true)
-    ESPTeamCheckToggle:SetValue(true)
-    ESPMaxDistanceSlider:SetValue(500)
-    
-    SpeedHackToggle:SetValue(false)
-    SpeedSlider:SetValue(2)
-    JumpPowerToggle:SetValue(false)
-    JumpSlider:SetValue(2)
-    InfiniteJumpToggle:SetValue(false)
-    NoclipToggle:SetValue(false)
-    
-    -- Áp dụng changes
-    UpdateSpeedHack()
-    UpdateJumpPower()
-    ToggleNoclip(false)
-    ClearESP()
-end
-
--- =============================================
--- INITIALIZATION
--- =============================================
+-- ===== Main loop (optimized) =====
 function Initialize()
-    -- Tạo FOV circle
     CreateFOVCircle()
-    
-    -- Thiết lập input handling
     SetupInputHandling()
-    
-    -- Main loop
-    Connections.RenderStepped = RunService.RenderStepped:Connect(function()
-        -- Update FOV circle
-        if FOVCircle then
+    InitializeESP()
+
+    if Connections.RenderStepped then Connections.RenderStepped:Disconnect() Connections.RenderStepped = nil end
+    Connections.RenderStepped = RunService.RenderStepped:Connect(function(dt)
+        -- update FOV circle position & radius
+        if FOVCircle and FOVCircle.Radius then
             FOVCircle.Radius = AimbotConfig.FOV
-            FOVCircle.Position = UserInputService:GetMouseLocation()
+            local mpos = UserInputService:GetMouseLocation()
+            FOVCircle.Position = Vector2.new(mpos.X, mpos.Y)
         end
-        
-        -- ESP update
+
+        -- Update ESP in batches (not heavy ops)
         if ESPConfig.Enabled then
             for _, esp in pairs(ESPObjects) do
-                UpdateESP(esp)
+                UpdateESPObject(esp)
             end
         end
-        
-        -- Aimbot logic
+
+        -- Aimbot flow
         if ShouldAim() then
             CurrentTarget = FindClosestPlayer()
             if CurrentTarget then
@@ -695,25 +579,8 @@ function Initialize()
             CurrentTarget = nil
         end
     end)
-    
-    -- GUI toggle hotkey
-    Connections.GUIToggle = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
-        
-        if input.KeyCode == Enum.KeyCode.F6 then
-            Window:Toggle()
-        end
-        
-        -- Quick toggle aimbot
-        if input.KeyCode == Enum.KeyCode.F7 then
-            AimbotConfig.Enabled = not AimbotConfig.Enabled
-            EnabledToggle:SetValue(AimbotConfig.Enabled)
-        end
-    end)
-    
-    print("Aimbot GUI Đã Khởi Chạy Thành Công!")
-    print("F6 - Ẩn/Hiện GUI | F7 - Bật/Tắt Nhanh Aimbot")
+    print("Aimbot GUI initialized. F6: Toggle GUI | F7: Quick toggle aimbot")
 end
 
--- Bắt đầu khởi chạy
+-- Start
 Initialize()
